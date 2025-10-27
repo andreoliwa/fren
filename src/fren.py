@@ -1,20 +1,27 @@
 """Rename dirs and files and merge dirs in the process."""
 
+import errno
 import os
 import re
 import unicodedata
 from functools import partial
 from pathlib import Path
-from typing import Set, Union
+from re import Match
 
 import click
 import pendulum
 from slugify import slugify
 
-from clib import dry_run_option, verbose_option, yes_option
-from clib.constants import COLOR_OK
-from clib.types import PathOrStr
-from clib.ui import echo_dry_run
+# Options to use as decorators on commands.
+yes_option = click.option("--yes", "-y", default=False, is_flag=True, help="Answer yes on all prompts")
+dry_run_option = click.option(
+    "--dry-run", "-n", default=False, is_flag=True, help="Only show what would be done, without actually doing it"
+)
+verbose_option = click.option("--verbose", "-v", default=False, is_flag=True, type=bool, help="Verbose display")
+
+PathOrStr = Path | str
+
+COLOR_OK = "green"
 
 REGEX_EXISTING_TIME = re.compile(r"(-[0-9]{2})[ _]?[Aa]?[Tt][ _]?([0-9]{2}[-._])")
 REGEX_UPPER_CASE_LETTER = re.compile(r"([a-z])([A-Z]+)")
@@ -61,7 +68,9 @@ IGNORE_FILES_ON_MERGE = {".DS_Store"}
 @dry_run_option
 @verbose_option
 @click.argument("directories", nargs=-1, type=click.Path(exists=True, file_okay=False, dir_okay=True), required=True)
-def rename_slugify(exclude, yes: bool, dry_run: bool, verbose: bool, directories):
+def rename_slugify(  # noqa: C901, PLR0912
+    exclude: tuple[str, ...], yes: bool, dry_run: bool, verbose: bool, directories: tuple[str, ...]
+) -> None:
     """Rename files recursively, slugifying them. Format dates in file names as ISO. Ignore hidden dirs/files."""
     excluded_dirs = set()
     excluded_files = set()
@@ -102,11 +111,10 @@ def rename_slugify(exclude, yes: bool, dry_run: bool, verbose: bool, directories
 
             if child.is_dir():
                 dirs_to_rename.add(child)
-            else:
-                if child not in excluded_files:
-                    files_to_rename.add(child)
-                elif verbose:
-                    click.echo(f"Ignoring file {relative_to_home(child)}")
+            elif child not in excluded_files:
+                files_to_rename.add(child)
+            elif verbose:
+                click.echo(f"Ignoring file {relative_to_home(child)}")
 
         # Rename directories first
         rename_batch(yes, dry_run, True, original_dir, dirs_to_rename)
@@ -118,15 +126,12 @@ def rename_slugify(exclude, yes: bool, dry_run: bool, verbose: bool, directories
             click.secho(f"{relative_to_home(directory)}: All files already have correct names.", fg=COLOR_OK)
 
 
-def rename_batch(yes: bool, dry_run: bool, is_dir: bool, root_dir: Path, items: Set[Path]) -> bool:
+def rename_batch(yes: bool, dry_run: bool, is_dir: bool, root_dir: Path, items: set[Path]) -> bool:
     """Rename a batch of items (directories or files)."""
     which_type = "directories" if is_dir else "files"
     pairs = []
     for item in sorted(items):
-        if is_dir:
-            new_name = slugify_camel_iso(item.name)
-        else:
-            new_name = slugify_camel_iso(item.stem) + item.suffix.lower()
+        new_name = slugify_camel_iso(item.name) if is_dir else slugify_camel_iso(item.stem) + item.suffix.lower()
 
         if item.name == new_name:
             continue
@@ -148,18 +153,18 @@ def rename_batch(yes: bool, dry_run: bool, is_dir: bool, root_dir: Path, items: 
                 click.secho(f"New file already exists! {new}", err=True, fg="red")
             else:
                 try:
-                    os.rename(original, new)
+                    original.rename(new)
                 except OSError as err:
-                    if err.errno == 66:  # Directory not empty
+                    if err.errno == errno.ENOTEMPTY:  # Directory not empty
                         merge_directories(new, original)
                     else:
-                        raise err
-        click.secho(f"{pretty_root}: {which_type.capitalize()} renamed succesfully.", fg="yellow")
+                        raise
+        click.secho(f"{pretty_root}: {which_type.capitalize()} renamed successfully.", fg="yellow")
 
     return bool(pairs)
 
 
-def relative_to_home(full_path: Union[str, Path]):
+def relative_to_home(full_path: str | Path) -> str:
     """Return a directory with ``~`` instead of printing the home dir full path."""
     path_obj = Path(full_path)
     return f"~/{path_obj.relative_to(path_obj.home())}"
@@ -233,8 +238,8 @@ def slugify_camel_iso(old_string: str) -> str:
 
     next_ten_years = pendulum.today().year + 10
 
-    def try_date(matchobj):
-        original_string = matchobj.group(0)
+    def try_date(match_obj: Match[str]) -> str:
+        original_string = match_obj.group(0)
         actual_date = None
         which_format = "YYYY-MM-DD"
         for date_format in POSSIBLE_FORMATS:
@@ -267,7 +272,7 @@ def slugify_camel_iso(old_string: str) -> str:
     return corrected_case.strip(SLUG_SEPARATOR)
 
 
-def merge_directories(target_dir: PathOrStr, *source_dirs: PathOrStr, dry_run: bool = False):
+def merge_directories(target_dir: PathOrStr, *source_dirs: PathOrStr, dry_run: bool = False) -> bool | None:
     """Merge directories into one, keeping subdirectories and renaming files with the same name."""
     echo = partial(echo_dry_run, dry_run=dry_run)
     target_color = "green"
@@ -296,6 +301,7 @@ def merge_directories(target_dir: PathOrStr, *source_dirs: PathOrStr, dry_run: b
             if not dry_run:
                 new_path.parent.mkdir(parents=True, exist_ok=True)
                 path.rename(new_path)
+    return None
 
 
 @click.command()
@@ -306,7 +312,7 @@ def merge_directories(target_dir: PathOrStr, *source_dirs: PathOrStr, dry_run: b
 @click.argument(
     "source_directories", nargs=-1, type=click.Path(exists=True, file_okay=False, dir_okay=True), required=True
 )
-def merge_dirs(dry_run: bool, target_directory, source_directories):
+def merge_dirs(dry_run: bool, target_directory: str, source_directories: tuple[str, ...]) -> None:
     """Merge directories into one, keeping subdirectories and renaming files with the same name."""
     merge_directories(target_directory, *source_directories, dry_run=dry_run)
 
@@ -321,10 +327,7 @@ def unique_file_name(path_or_str: PathOrStr) -> Path:
             original_stem = match.group("original_stem")
             index = int(match.group("index") or 0) + 1
 
-        if not original_stem:
-            new_stem = path.stem
-        else:
-            new_stem = original_stem
+        new_stem = original_stem if original_stem else path.stem
 
         new_name = f"{new_stem}_Copy{index if index else ''}{path.suffix}"
         path = path.with_name(new_name)
@@ -344,8 +347,12 @@ def dir_with_end_slash(path: PathOrStr) -> str:
     >>> dir_with_end_slash(Path('/tmp/dir/file.txt'))
     '/tmp/dir/file.txt/'
     """
-    if isinstance(path, str):
-        path = Path(path.rstrip(REMOVE_CHARS_FROM_DIR))
-    else:
-        path = Path(path)
+    path = Path(path.rstrip(REMOVE_CHARS_FROM_DIR)) if isinstance(path, str) else Path(path)
     return str(path) + os.sep
+
+
+def echo_dry_run(message: str, *, nl: bool = True, dry_run: bool = False, **styles: str | bool | int) -> None:
+    """Display a message with the optional dry-run prefix on each line."""
+    if dry_run:
+        click.secho("[dry-run] ", fg="bright_cyan", nl=False)
+    click.secho(message, nl=nl, **styles)

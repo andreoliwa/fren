@@ -5,10 +5,10 @@ from textwrap import dedent
 
 from testfixtures import compare
 
-from clib.rename import merge_directories, unique_file_name
+from fren import merge_directories, unique_file_name
 
 
-def test_unique_file_name(tmp_path):
+def test_unique_file_name(tmp_path: Path) -> None:
     """Test unique file names with numeric index."""
     path = tmp_path / "file.txt"
     assert unique_file_name(path) == path
@@ -26,13 +26,13 @@ def test_unique_file_name(tmp_path):
     assert unique_file_name(second) == third
 
 
-def create(file: Path):
+def create(file: Path) -> None:
     """Create an empty file and its parent dirs."""
     file.parent.mkdir(parents=True, exist_ok=True)
     file.touch()
 
 
-def test_merge_directories(tmp_path):
+def test_merge_directories(tmp_path: Path) -> None:
     """Test merge directories."""
     create(tmp_path / "2020" / "12" / "one.txt")
     create(tmp_path / "2020" / "root.txt")
