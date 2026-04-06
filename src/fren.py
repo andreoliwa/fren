@@ -327,9 +327,9 @@ def unique_file_name(path_or_str: PathOrStr) -> Path:
             original_stem = match.group("original_stem")
             index = int(match.group("index") or 0) + 1
 
-        new_stem = original_stem if original_stem else path.stem
+        new_stem = original_stem or path.stem
 
-        new_name = f"{new_stem}_Copy{index if index else ''}{path.suffix}"
+        new_name = f"{new_stem}_Copy{index or ''}{path.suffix}"
         path = path.with_name(new_name)
 
     return path
