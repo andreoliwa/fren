@@ -1,221 +1,181 @@
 # fren
 
-**File renamer with slugify and date detection**
+**File renamer that understands dates - with slugify, Unicode, and CamelCase smarts**
 
-`fren` is a powerful command-line tool for batch renaming files and directories with intelligent slugification
-and automatic date formatting. It also includes a utility for merging directories while handling file conflicts.
+`fren` is a command-line tool for batch-renaming files and directories. It detects dates inside filenames in 17+ formats, converts them to ISO 8601, slugifies the rest of the name, splits CamelCase, normalizes Unicode, and lowercases extensions. It also includes a separate `merge` command for combining directories with automatic conflict resolution.
 
 ## Features
 
-- 🔤 **Smart Slugification**: Converts file and directory names to clean, URL-friendly formats
-- 📅 **Intelligent Date Detection**: Automatically detects and reformats dates to ISO 8601 format
-- 🐫 **CamelCase Handling**: Properly splits and formats CamelCase and PascalCase names
-- 🌍 **Unicode Support**: Handles accented characters and special symbols
-- 📁 **Directory Merging**: Merge multiple directories with automatic conflict resolution
-- 🔍 **Selective Processing**: Exclude specific files and directories from operations
-- 🔒 **Safe Operations**: Dry-run mode to preview changes before applying them
-- 🙈 **Hidden File Handling**: Automatically ignores hidden files and directories
+- 📅 **Date Detection**: Recognizes 17+ formats inside filenames (human-readable, ISO, datetime, minute-precision) and rewrites them as ISO 8601
+- 🔤 **Slugification**: Cleans filenames by replacing spaces and punctuation with a single separator (default `-`)
+- 🐫 **CamelCase Splitting**: `WhatsApp` becomes `Whats-App`, `JSONFile` becomes `JSON-File`
+- 🌍 **Unicode Normalization**: Strips accents (`Bancários` -> `Bancarios`) via NFKC + ASCII transliteration
+- 📁 **Directory Merging**: A separate `fren merge` command moves files between directories, appending `_Copy` / `_Copy1` / `_Copy2` on conflicts
+- 🔍 **Exclusions**: Skip specific paths with `-x`
+- 🙈 **Hidden Files**: Entries starting with `.` are skipped automatically
+- 🔒 **Dry-run by default**: `fren rename DIR` previews; `--apply` is required to actually rename
+- 🎨 **Colored output**: Files in bright green, directories in bright blue, with the unchanged parent path dimmed
+- 📜 **Transaction log**: Every applied batch is recorded as JSONL under `${XDG_STATE_HOME:-~/.local/state}/fren/log/`
 
 ## Installation
 
-```bash
-pip install fren
-```
-
-Or install from source:
+From source:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/andreoliwa/fren.git
 cd fren
-pip install -e .
+cargo install --path crates/fren-cli
 ```
 
-## Scripts
+This installs the `fren` binary to `~/.cargo/bin/`.
 
-### 1. `rename-slugify` (Primary Tool)
+## Commands
 
-The main script for intelligently renaming files and directories with slugification and date formatting.
+### `fren rename`
 
-#### Usage
+Rename files and directories with slugify + ISO date detection.
 
 ```bash
-rename-slugify [OPTIONS] DIRECTORIES...
+fren rename [OPTIONS] DIRECTORIES...
 ```
 
-#### Options
+Options:
 
-- `-x, --exclude PATH`: Exclude one or more directories or files from processing (can be used multiple times)
-- `-y, --yes`: Answer yes to all prompts (non-interactive mode)
-- `-n, --dry-run`: Show what would be done without actually renaming anything
-- `-v, --verbose`: Display detailed information about the renaming process
+- `-x, --exclude PATH`: Exclude one or more paths (can be repeated)
+- `--apply`: Actually perform the renames (without this, `fren` only prints what it would do)
+- `--no-log`: Skip writing the transaction log
+- `--log-dir DIR`: Override transaction-log directory
 
-#### Examples
-
-**Basic usage - rename all files in a directory:**
+Examples:
 
 ```bash
-rename-slugify ~/Documents/MyFiles
+# Preview (dry-run is the default)
+fren rename ~/Documents/MyFiles
+
+# Actually rename
+fren rename --apply ~/Documents/MyFiles
+
+# Multiple directories with exclusions
+fren rename --apply -x ~/temp/skip -x ~/temp/important.txt ~/temp
 ```
 
-**Dry-run to preview changes:**
+### `fren merge`
+
+Merge source directories into a target directory. Move-only - filenames are preserved (with `_Copy` suffixes on conflicts). If you also want to rename the merged contents, run `fren rename` afterwards.
 
 ```bash
-rename-slugify --dry-run ~/Documents/MyFiles
+fren merge [OPTIONS] TARGET SOURCES...
 ```
 
-**Exclude specific directories:**
+Options:
+
+- `--apply`: Actually perform the moves
+
+Examples:
 
 ```bash
-rename-slugify --exclude ~/Documents/MyFiles/KeepOriginal ~/Documents/MyFiles
+# Preview
+fren merge ~/Documents/Target ~/Documents/Source1 ~/Documents/Source2
+
+# Apply
+fren merge --apply ~/Documents/Target ~/Documents/Source1 ~/Documents/Source2
+
+# Merge several into the current directory
+fren merge --apply . src1/ src2/ src3/
 ```
 
-**Process multiple directories with auto-confirm:**
+### `fren completions`
+
+Print shell completions.
 
 ```bash
-rename-slugify --yes ~/Documents/Folder1 ~/Documents/Folder2
+fren completions bash > ~/.local/share/bash-completion/completions/fren
+fren completions zsh  > ~/.zsh/completions/_fren
+fren completions fish > ~/.config/fish/completions/fren.fish
 ```
 
-**Verbose mode with exclusions:**
+## How rename works
 
-```bash
-rename-slugify -v -x ~/temp/skip -x ~/temp/important.txt ~/temp
+The pipeline transforms filenames in this order:
+
+1. **Unicode normalize** (NFKC) and transliterate non-ASCII to ASCII
+2. **Inject separator at CamelCase boundaries** (`WhatsApp` -> `Whats_App`)
+3. **Inject separator at "at"-time patterns** (`2019-08-21 at 14.24.19` -> `2019-08-21_14_24_19`)
+4. **Slugify**: replace whitespace and punctuation with the internal separator
+5. **Detect dates** and rewrite them as ISO 8601
+6. **Apply case mode** (default: preserve original case)
+7. **Collapse consecutive separators** and **substitute to user separator** (default `-`)
+8. **Lowercase the file extension**
+
+### Examples
+
+```text
+Hello World 2024-01-15.txt           -> Hello-World-2024-01-15.txt
+WhatsApp Image 2024-01-15 at 12.30.45.jpg -> Whats-App-Image-2024-01-15T12-30-45.jpg
+CamelCaseFile.PDF                    -> Camel-Case-File.pdf
+Bancários.txt                        -> Bancarios.txt
+report-25-04-2017.pdf                -> report-2017-04-25.pdf
+photo_20191020.jpg                   -> photo-2019-10-20.jpg
+2026-05-03-18-57.log                 -> 2026-05-03T18-57-00.log
 ```
 
-#### How It Works
+### Supported date formats
 
-The `rename-slugify` script transforms file and directory names using these rules:
+- **Human-readable**: `DD_MM_YYYY`, `DD/MM/YYYY`, `DD.MM.YYYY`, `DD-MM-YY`, `DDMMYYYY`, `DDMMYY`, `MM_YYYY`
+- **ISO / inverted**: `YYYY-MM-DD`, `YYYY_MM_DD`, `YYYYMMDD`, `YYYY_MM`
+- **Datetime (full)**: `DD_MM_YYYY_HH_mm_ss`, `YYYY_MM_DD_HH_mm_ss`, `YYYYMMDDHHmmss`, `YYYYMMDD_HHmmss`, `DD_MM_YY_HH_mm_ss`, `YY_MM_DD_HH_mm_ss`
+- **Datetime (minute-precision, zero-second pad)**: `DD_MM_YYYY_HH_mm`, `YYYY_MM_DD_HH_mm`, `DDMMYYYYHHmm`
 
-1. **Slugification**: Converts names to lowercase with underscores, then capitalizes each word
-   - `"My Document.pdf"` → `"My_Document.pdf"`
-   - `"some-file here.txt"` → `"Some_File_Here.txt"`
+Two-digit years between `(current_year + 10)` and `99` are interpreted as 19YY; otherwise 20YY. With the system clock at 2026 this means `30..=99` -> 1930..1999 and `00..=29` -> 2000..2029, except dates more than 10 years in the future, which roll back a century.
 
-2. **CamelCase Splitting**: Intelligently splits CamelCase and PascalCase
-   - `"CamelCaseFile.doc"` → `"Camel_Case_File.doc"`
-   - `"JSONParser.py"` → `"Jsonparser.py"`
-   - `"WhatsApp Image.jpg"` → `"Whats_App_Image.jpg"`
+## How merge works
 
-3. **Date Formatting**: Detects various date formats and converts to ISO 8601
-   - `"report-25-04-2017.pdf"` → `"Report_2017-04-25.pdf"`
-   - `"photo_20191020.jpg"` → `"Photo_2019-10-20.jpg"`
-   - `"scan 30.12.2017.pdf"` → `"Scan_2017-12-30.pdf"`
-   - `"backup_240819.zip"` → `"Backup_2019-08-24.zip"`
+`fren merge TARGET SOURCES...`:
 
-4. **DateTime Formatting**: Handles timestamps with time components
-   - `"log_2017_12_30_10_44_56.txt"` → `"Log_2017-12-30T10-44-56.txt"`
-   - `"WhatsApp Ptt 2019-08-21 at 14.24.19.opus"` → `"Whats_App_Ptt_2019-08-21T14-24-19.opus"`
-   - `"video 20180726_224001.mp4"` → `"Video_2018-07-26T22-40-01.mp4"`
+1. Walks each source recursively
+2. Computes the target path = `TARGET / relative_subpath_from_source`
+3. If the target file already exists (or another move in the batch already claimed that path), appends `_Copy`, `_Copy1`, `_Copy2`, ... to the stem until a free name is found
+4. Creates intermediate directories as needed
+5. Moves the file with `std::fs::rename`
+6. Skips `.DS_Store` and similar metadata files
 
-5. **Unicode Normalization**: Handles accented characters
-   - `"Atenção.txt"` → `"Atencao.txt"`
-   - `"Bancários.pdf"` → `"Bancarios.pdf"`
+Source directory structure is preserved verbatim. Only files are moved; empty source directories remain.
 
-6. **File Extension**: Converts extensions to lowercase
-   - `"Document.PDF"` → `"Document.pdf"`
+## Architecture
 
-#### Supported Date Formats
+`fren` is a Cargo workspace with three crates:
 
-The script recognizes and converts these date formats:
+- **`crates/slug-preserve`** (internal): a case-preserving slugifier. Unlike most Rust slug crates that always lowercase, this one supports five case modes: `Preserve`, `Lower`, `Upper`, `Title`, `Capitalize`.
+- **`crates/fren`**: the library. Exposes `slugify_camel_iso`, `plan`, `execute`, `merge_directories`, `unique_file_name`, plus the public type surface (`RenamePlan`, `DetectedDate`, `FrenError`, `ConflictPolicy`, `SlugOpts`, `LogSink`, `JsonlLogSink`, etc.). No CLI dependencies; library discipline lints deny `print_stdout`, `print_stderr`, `panic`, `unwrap_used`, `expect_used`.
+- **`crates/fren-cli`**: a thin clap-derive binary that consumes the library.
 
-- Human-readable: `DD/MM/YYYY`, `DD.MM.YYYY`, `DD_MM_YYYY`, `DD-MM-YY`
-- ISO-like: `YYYY-MM-DD`, `YYYY_MM_DD`, `YYYYMMDD`
-- With time: `DD_MM_YYYY_HH_mm_ss`, `YYYY-MM-DDTHH-mm-ss`, `YYYYMMDDHHmmss`
-- Month-only: `MM/YYYY`, `YYYY-MM`
+The library is the source of truth. The binary parses arguments, builds option structs, and formats output. Other Rust projects can embed `fren` directly without spawning a subprocess.
 
-The script intelligently handles 2-digit years, treating them as between 1929 and 2029.
+## Safety
 
-#### Special Features
-
-- **Hidden Files**: Automatically skips files and directories starting with `.`
-- **Directory Merging**: If renaming a directory would conflict with an existing directory, automatically merges them
-- **Batch Processing**: Processes directories first, then files, ensuring proper hierarchy
-- **Relative Paths**: Displays paths relative to home directory (`~`) for cleaner output
-
-### 2. `merge-dirs`
-
-Merge multiple source directories into a single target directory, handling file conflicts automatically.
-
-#### Usage
-
-```bash
-merge-dirs [OPTIONS] TARGET_DIRECTORY SOURCE_DIRECTORIES...
-```
-
-#### Options
-
-- `-n, --dry-run`: Show what would be done without actually moving files
-
-#### Examples
-
-**Merge two directories into one:**
-
-```bash
-merge-dirs ~/Documents/Target ~/Documents/Source1 ~/Documents/Source2
-```
-
-**Preview merge operation:**
-
-```bash
-merge-dirs --dry-run ~/Documents/Target ~/Documents/Source1
-```
-
-#### How It Works
-
-1. **Preserves Structure**: Maintains the directory structure from source directories
-2. **Conflict Resolution**: If a file with the same name exists in the target:
-   - Appends `_Copy` to the filename
-   - If `_Copy` exists, appends `_Copy1`, `_Copy2`, etc.
-3. **Ignores System Files**: Automatically skips `.DS_Store` and similar files
-4. **Creates Directories**: Automatically creates necessary subdirectories in the target
-
-#### Example Conflict Resolution
-
-```
-Target/document.pdf (exists)
-Source/document.pdf → Target/document_Copy.pdf
-Source2/document.pdf → Target/document_Copy1.pdf
-```
-
-## Requirements
-
-- Python >= 3.13
-- Dependencies:
-  - `click`: Command-line interface
-  - `pendulum`: Date/time parsing and formatting
-  - `python-slugify`: Text slugification
+- **Dry-run is the default**. `--apply` is required to mutate the filesystem.
+- **No silent overwrites**. Every rename pre-checks the target and refuses to proceed if it exists outside the batch (the `Abort` conflict policy).
+- **Within-batch collisions are detected at planning time**. If two source paths would rename to the same target, the batch aborts before any I/O happens.
+- **Bottom-up execution**. Deeper paths are renamed first, so a directory rename never invalidates the queued paths of its children. This fixes a class of bugs that affected the original Python implementation.
+- **Case-only renames** on case-insensitive filesystems (macOS APFS, Windows NTFS) route through a temporary name to avoid silent no-ops.
+- **Transaction log**. Every applied batch writes a JSONL file under `${XDG_STATE_HOME:-~/.local/state}/fren/log/<timestamp>-<batch-uuid>.jsonl` so applied changes can be audited or, in the future, undone.
 
 ## Development
 
-### Running Tests
-
 ```bash
-pytest
+cargo build           # debug build
+cargo test            # 48 tests across slugify, planner, executor, merge
+cargo clippy --workspace --all-targets -- -D warnings
+cargo fmt --all
+cargo install --path crates/fren-cli   # install/refresh ~/.cargo/bin/fren
 ```
 
-### Code Quality
-
-The project uses Ruff for linting and formatting:
+Pre-commit:
 
 ```bash
-ruff check src/
-ruff format src/
+prek install
+prek run
 ```
-
-## Use Cases
-
-- **Photo Organization**: Rename photos with dates from various cameras and phones
-- **Document Management**: Clean up document names from different sources
-- **Archive Cleanup**: Standardize file names in old archives
-- **WhatsApp Media**: Format WhatsApp image/video/audio file names properly
-- **Project Files**: Organize project files with consistent naming
-- **Directory Consolidation**: Merge duplicate or related directories
-
-## Tips
-
-1. **Always use `--dry-run` first** to preview changes before applying them
-2. **Use `--verbose`** to understand what's being skipped or excluded
-3. **Exclude important directories** with `-x` to avoid accidental renames
-4. **Process in batches** rather than your entire file system at once
-5. **Backup important data** before running batch operations
 
 ## License
 
