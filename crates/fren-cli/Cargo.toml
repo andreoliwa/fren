@@ -1,0 +1,27 @@
+[[bin]]
+name = "fren"
+path = "src/main.rs"
+
+[dependencies]
+anstream = "0.6"
+anstyle = "1"
+fren = {path = "../fren", version = "0.2.0"}
+chrono.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[package]
+description = "fren - file renamer that understands dates (CLI)"
+name = "fren-cli"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true

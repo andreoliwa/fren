@@ -1,0 +1,42 @@
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"
+
+[workspace]
+members = ["crates/fren", "crates/fren-cli", "crates/slug-preserve"]
+resolver = "2"
+
+[workspace.dependencies]
+# Pinned at workspace level so all member crates align.
+chrono = {default-features = false, features = ["clock", "std"], version = "0.4"}
+clap = {features = ["derive", "env", "wrap_help"], version = "4.5"}
+clap_complete = "4.5"
+deunicode = "1"
+# Dev/test
+proptest = "1"
+regex = "1"
+serde = {features = ["derive"], version = "1"}
+serde_json = "1"
+tempfile = "3"
+thiserror = "2"
+unicode-normalization = "0.1"
+uuid = {features = ["serde", "v7"], version = "1"}
+walkdir = "2"
+
+[workspace.metadata.dist]
+# Placeholder - populated by `cargo dist init` in a later commit.
+cargo-dist-version = "0.31.0"
+ci = ["github"]
+installers = []
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+
+[workspace.package]
+authors = ["W. Augusto Andreoli <andreoliwa@sent.com>"]
+edition = "2021"
+homepage = "https://github.com/andreoliwa/fren"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/andreoliwa/fren"
+rust-version = "1.80"
+version = "0.2.0"

@@ -1,0 +1,34 @@
+[dependencies]
+slug-preserve = {path = "../slug-preserve", version = "0.2.0"}
+chrono.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+unicode-normalization.workspace = true
+uuid.workspace = true
+walkdir.workspace = true
+
+[dev-dependencies]
+slug-preserve = {path = "../slug-preserve", version = "0.2.0"}
+proptest.workspace = true
+tempfile.workspace = true
+
+[lints.clippy]
+expect_used = "deny"
+panic = "deny"
+print_stderr = "deny"
+print_stdout = "deny"
+unwrap_used = "deny"
+
+[package]
+description = "fren - file renamer that understands dates (library)"
+name = "fren"
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true

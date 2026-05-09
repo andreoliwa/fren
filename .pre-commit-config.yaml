@@ -20,16 +20,16 @@ repos:
         exclude: '\.golden$'
       - id: debug-statements
   - repo: https://github.com/pappasam/toml-sort
-    rev: v0.24.3
+    rev: v0.24.4
     hooks:
       - id: toml-sort-fix
         exclude: '.*\.lock$'
   - repo: https://github.com/google/keep-sorted
-    rev: v0.7.1
+    rev: v0.8.0
     hooks:
       - id: keep-sorted
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.2
+    rev: v0.15.12
     hooks:
       - id: ruff-format
       - id: ruff-check
@@ -39,11 +39,6 @@ repos:
     hooks:
       - id: python-check-mock-methods
       - id: rst-backticks
-  - repo: https://github.com/openstack/bashate
-    rev: 2.1.1
-    hooks:
-      - id: bashate
-        args: [-i, E006]
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
     hooks:
@@ -61,7 +56,7 @@ repos:
         args:
           - --no-error-on-unmatched-pattern
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.9.1
+    rev: v4.15.1
     hooks:
       - id: commitizen
         stages:
