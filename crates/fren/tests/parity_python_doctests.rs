@@ -20,6 +20,10 @@ fn legacy_python_opts() -> SlugOpts {
     SlugOpts {
         separator: '_',
         case: CaseMode::Capitalize,
+        // Python always split CamelCase. Match that behavior in the
+        // parity tests; the new default in Rust is `false` (see the
+        // separate test file `camel_case_default.rs`).
+        split_camel: true,
     }
 }
 

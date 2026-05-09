@@ -1,11 +1,13 @@
-//! Slugify with CamelCase splitting and ISO date detection.
+//! Slugify with optional CamelCase splitting and ISO date detection.
 //!
 //! Pipeline:
 //!
 //! 1. NFKC normalize input.
-//! 2. Inject `_` at CamelCase boundaries (`([a-z])([A-Z]+)`).
+//! 2. (Optional, off by default) Inject `_` at CamelCase boundaries
+//!    (`([a-z])([A-Z]+)`). Controlled by `SlugOpts.split_camel`.
 //! 3. Inject `_` at "existing time" boundaries (the
-//!    `WhatsApp ... at 14.24.19` pattern).
+//!    `WhatsApp ... at 14.24.19` pattern). Always on - this is part of
+//!    date detection, not CamelCase splitting.
 //! 4. Slugify via `slug-preserve` using `_` as the internal separator
 //!    (so the date-format table - keyed off `_` - matches directly).
 //! 5. Run date regex; replace detected spans with their ISO form
@@ -87,24 +89,29 @@ pub fn slugify_camel_iso_with_year(input: &str, opts: &SlugOpts, current_year: i
             format!("{g1}_{g2}")
         })
         .into_owned();
-    let with_camel = re_camelcase()
-        .replace_all(&with_time, |c: &regex::Captures<'_>| {
-            #[allow(clippy::expect_used)]
-            let g1 = c.get(1).expect("regex group 1").as_str();
-            #[allow(clippy::expect_used)]
-            let g2 = c.get(2).expect("regex group 2").as_str();
-            format!("{g1}_{g2}")
-        })
-        .into_owned();
+    let with_camel = if opts.split_camel {
+        re_camelcase()
+            .replace_all(&with_time, |c: &regex::Captures<'_>| {
+                #[allow(clippy::expect_used)]
+                let g1 = c.get(1).expect("regex group 1").as_str();
+                #[allow(clippy::expect_used)]
+                let g2 = c.get(2).expect("regex group 2").as_str();
+                format!("{g1}_{g2}")
+            })
+            .into_owned()
+    } else {
+        with_time
+    };
 
     // Step 4: slugify with PIPELINE_SEP as sentinel. Always Preserve case
     // here - case transformation happens after date detection so that
     // ISO date substrings emitted by detect_and_replace get the correct
-    // case treatment (Python applies its `_[a-z] → _X` post-pass after
+    // case treatment (Python applies its `_[a-z] -> _X` post-pass after
     // dates are inserted).
     let pipeline_opts = SlugOpts {
         separator: PIPELINE_SEP,
         case: slug_preserve::CaseMode::Preserve,
+        split_camel: opts.split_camel,
     };
     let slugged = slugify_with_sentinel(&with_camel, PIPELINE_SEP, &pipeline_opts);
 

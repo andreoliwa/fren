@@ -12,6 +12,7 @@
 //! let legacy_python = SlugOpts {
 //!     separator: '_',
 //!     case: CaseMode::Capitalize,
+//!     split_camel: true,
 //! };
 //! let out = slugify_camel_iso_with_year("Hello World 2024-01-15.txt", &legacy_python, 2024);
 //! assert!(out.starts_with("Hello"));

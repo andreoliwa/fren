@@ -25,6 +25,18 @@ pub struct SlugOpts {
     pub separator: char,
     /// How to handle character case.
     pub case: CaseMode,
+    /// Whether to inject a separator at CamelCase / PascalCase boundaries
+    /// before slugifying (e.g. `WhatsApp` -> `Whats_App`).
+    ///
+    /// Default: `false`. When `false`, `WhatsApp` is preserved as-is.
+    /// When `true`, the boundary `[a-z][A-Z]+` gets a separator inserted
+    /// between the lowercase letter and the run of uppercase letters that
+    /// follows.
+    ///
+    /// `slug-preserve` itself does not split CamelCase; it just carries
+    /// the option so consumers (like `fren`) can act on it before calling
+    /// `slugify`.
+    pub split_camel: bool,
 }
 
 impl Default for SlugOpts {
@@ -32,6 +44,7 @@ impl Default for SlugOpts {
         Self {
             separator: '-',
             case: CaseMode::Preserve,
+            split_camel: false,
         }
     }
 }

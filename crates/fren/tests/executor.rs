@@ -19,6 +19,7 @@ fn rust_default_opts() -> SlugOpts {
     SlugOpts {
         separator: '-',
         case: CaseMode::Preserve,
+        split_camel: false,
     }
 }
 

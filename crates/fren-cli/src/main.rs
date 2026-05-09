@@ -88,6 +88,11 @@ enum Command {
         /// Exclude paths (multi).
         #[arg(short = 'x', long)]
         exclude: Vec<std::path::PathBuf>,
+
+        /// Split CamelCase / PascalCase boundaries with the separator
+        /// (e.g. `WhatsApp` -> `Whats-App`). Off by default.
+        #[arg(long)]
+        split_camel: bool,
     },
 
     /// Merge source directories into a target directory.
@@ -125,7 +130,8 @@ fn run(cli: Cli) -> Result<(), fren::FrenError> {
         Command::Rename {
             directories,
             exclude,
-        } => run_rename(&cli, directories, exclude),
+            split_camel,
+        } => run_rename(&cli, directories, exclude, *split_camel),
         Command::Merge { target, sources } => run_merge(&cli, target, sources),
         Command::Completions { shell } => {
             let mut cmd = Cli::command();
@@ -284,9 +290,13 @@ fn run_rename(
     cli: &Cli,
     directories: &[std::path::PathBuf],
     exclude: &[std::path::PathBuf],
+    split_camel: bool,
 ) -> Result<(), fren::FrenError> {
     let opts = fren::RenameOpts {
-        slugify: fren::SlugOpts::default(),
+        slugify: fren::SlugOpts {
+            split_camel,
+            ..fren::SlugOpts::default()
+        },
         plan: fren::PlanOpts {
             recursive: true,
             exclude: exclude.to_vec(),
