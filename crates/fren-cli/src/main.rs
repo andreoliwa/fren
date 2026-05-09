@@ -8,7 +8,10 @@ use anstream::println as cprintln;
 use anstyle::{AnsiColor, Color, Style};
 use clap::{CommandFactory, Parser, Subcommand};
 use fren::LogSink;
+use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
+
+mod output;
 
 /// Style for new (target) FILE names. Bright green.
 fn style_new_file() -> Style {
@@ -286,6 +289,17 @@ fn format_rename_line(plan: &fren::RenamePlan) -> String {
     )
 }
 
+fn confirm_apply(n: usize) -> io::Result<bool> {
+    eprint!("Apply {} rename(s)? [y/N] ", n);
+    let _ = io::stderr().flush();
+    let mut line = String::new();
+    io::stdin().read_line(&mut line)?;
+    Ok(matches!(
+        line.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
+}
+
 fn run_rename(
     cli: &Cli,
     directories: &[std::path::PathBuf],
@@ -318,16 +332,48 @@ fn run_rename(
         fren::rename(&roots, &opts)?
     } else {
         let plans = fren::plan(&roots, &opts.slugify, &opts.plan)?;
+
+        if plans.is_empty() {
+            cprintln!("All names already in canonical form.");
+            return Ok(());
+        }
+
+        if !cli.yes {
+            // Non-TTY stdin without --yes: error rather than hang.
+            if !io::stdin().is_terminal() {
+                eprintln!("error: --apply requires --yes when stdin is not a terminal");
+                return Err(fren::FrenError::InvalidInput(
+                    "--apply requires --yes when stdin is not a terminal".to_string(),
+                ));
+            }
+
+            // Build the plan preview as a string and send it through the pager.
+            let mut preview = format!("Would rename {} item(s):\n", plans.len());
+            for plan in &plans {
+                preview.push_str(&format!("{}\n", format_rename_line(plan)));
+            }
+            output::pager::page(&preview).unwrap_or_else(|_| {
+                eprint!("{}", preview);
+            });
+
+            if !confirm_apply(plans.len()).map_err(|e| fren::FrenError::Io {
+                path: std::path::PathBuf::new(),
+                source: e,
+            })? {
+                eprintln!("Aborted.");
+                return Ok(());
+            }
+        }
+
         let batch_id = plans
             .first()
             .map(|p| p.batch_id)
             .unwrap_or_else(uuid::Uuid::nil);
         let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
-        let report = if cli.no_log || plans.is_empty() {
+        let report = if cli.no_log {
             fren::execute(&plans)?
         } else {
             let mut sink = fren::JsonlLogSink::open(cli.log_dir.as_deref(), batch_id, &ts)?;
-            // Header
             sink.append(&fren::LogRecord::Batch {
                 v: 1,
                 id: batch_id,
@@ -338,7 +384,6 @@ fn run_rename(
                 fren_version: env!("CARGO_PKG_VERSION").to_string(),
             })?;
             let report = fren::execute_with_log(&plans, &mut sink)?;
-            // End marker
             let status = if report.errors.is_empty() {
                 "ok"
             } else if report.applied > 0 {
