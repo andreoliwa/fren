@@ -84,11 +84,7 @@ fn walk_inner(
         }
 
         // Skip excluded paths (any prefix match).
-        if opts
-            .exclude
-            .iter()
-            .any(|excl| child_path.starts_with(excl))
-        {
+        if opts.exclude.iter().any(|excl| child_path.starts_with(excl)) {
             continue;
         }
 

@@ -75,7 +75,10 @@ pub fn rename(
             applied: 0,
             skipped: 0,
             errors: Vec::new(),
-            batch_id: plans.first().map(|p| p.batch_id).unwrap_or_else(uuid::Uuid::nil),
+            batch_id: plans
+                .first()
+                .map(|p| p.batch_id)
+                .unwrap_or_else(uuid::Uuid::nil),
             log_path: None,
         }
     };

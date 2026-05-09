@@ -9,10 +9,11 @@ use std::path::PathBuf;
 /// Currently only [`ConflictPolicy::Abort`] is functional; the other
 /// variants are reserved for future expansion and are accepted by the
 /// type but not yet implemented in the planner/executor.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ConflictPolicy {
     /// Stop the batch on conflict. No I/O is performed when a conflict is
     /// detected at planning time.
+    #[default]
     Abort,
     /// Append the user separator + an integer to the target name until a
     /// free name is found.
@@ -23,12 +24,6 @@ pub enum ConflictPolicy {
     /// (file conflicts inside fall back to `Number`). For file-vs-file
     /// conflicts, behaves like `Abort`.
     Merge,
-}
-
-impl Default for ConflictPolicy {
-    fn default() -> Self {
-        Self::Abort
-    }
 }
 
 /// Options for planning a rename batch.

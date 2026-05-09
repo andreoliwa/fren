@@ -127,9 +127,7 @@ pub fn slugify_camel_iso_with_year(input: &str, opts: &SlugOpts, current_year: i
     } else {
         collapsed.replace(PIPELINE_SEP, &opts.separator.to_string())
     };
-    final_str
-        .trim_matches(opts.separator)
-        .to_string()
+    final_str.trim_matches(opts.separator).to_string()
 }
 
 fn slug_preserve_apply_case(input: &str, mode: slug_preserve::CaseMode) -> String {

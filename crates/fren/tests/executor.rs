@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Integration tests for the executor.
 
 use fren::{execute, plan_with_year, ConflictPolicy, PlanOpts, SlugOpts};

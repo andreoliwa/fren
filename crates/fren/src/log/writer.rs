@@ -111,7 +111,8 @@ impl JsonlLogSink {
 
 impl LogSink for JsonlLogSink {
     fn append(&mut self, record: &LogRecord) -> Result<(), FrenError> {
-        let line = serde_json::to_string(record).map_err(|e| FrenError::InvalidInput(e.to_string()))?;
+        let line =
+            serde_json::to_string(record).map_err(|e| FrenError::InvalidInput(e.to_string()))?;
         writeln!(self.writer, "{line}").map_err(|source| FrenError::Io {
             path: self.path.clone(),
             source,

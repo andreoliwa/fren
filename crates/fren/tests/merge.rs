@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Integration tests for `fren::merge_directories`. Ports the Python
 //! `test_merge_directories` and `test_unique_file_name` cases.
 

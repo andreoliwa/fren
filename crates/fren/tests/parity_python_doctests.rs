@@ -1,3 +1,7 @@
+// Test code legitimately uses unwrap/expect/panic for assertions and
+// fixture setup; the library-level lints are too strict for tests.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Parity tests: every doctest from the original Python
 //! `slugify_camel_iso` is reproduced here as a Rust unit test.
 //!
@@ -109,19 +113,13 @@ fn doctest_normal_datetime() {
 #[test]
 
 fn doctest_no_day_inverted() {
-    assert_eq!(
-        slug(" no day inverted 1975 08 "),
-        "No_Day_Inverted_1975-08"
-    );
+    assert_eq!(slug(" no day inverted 1975 08 "), "No_Day_Inverted_1975-08");
 }
 
 #[test]
 
 fn doctest_no_day_normal() {
-    assert_eq!(
-        slug(" no day normal 08 1975 "),
-        "No_Day_Normal_1975-08"
-    );
+    assert_eq!(slug(" no day normal 08 1975 "), "No_Day_Normal_1975-08");
 }
 
 #[test]
@@ -178,7 +176,10 @@ fn doctest_fwd_consulta() {
 #[test]
 
 fn doctest_unicode_bancarios() {
-    assert_eq!(slug("bla Bancários - Atenção ble"), "Bla_Bancarios_Atencao_Ble");
+    assert_eq!(
+        slug("bla Bancários - Atenção ble"),
+        "Bla_Bancarios_Atencao_Ble"
+    );
 }
 
 #[test]
@@ -217,7 +218,10 @@ fn doctest_glued_ddmmyyyy() {
 #[test]
 
 fn doctest_glued_iso_datetime() {
-    assert_eq!(slug("glued2019-08-23T12-48-26"), "Glued_2019-08-23T12-48-26");
+    assert_eq!(
+        slug("glued2019-08-23T12-48-26"),
+        "Glued_2019-08-23T12-48-26"
+    );
 }
 
 #[test]
@@ -272,10 +276,7 @@ fn datetime_iso_minute_only_human() {
 // produces *something* (no panic, no empty string for non-empty input).
 #[test]
 fn smoke_function_runs_on_basic_input() {
-    let out = fren::slugify_camel_iso_with_year(
-        "Hello World 2024-01-15.txt",
-        &SlugOpts::default(),
-        2024,
-    );
+    let out =
+        fren::slugify_camel_iso_with_year("Hello World 2024-01-15.txt", &SlugOpts::default(), 2024);
     assert!(!out.is_empty(), "output should not be empty: got {out:?}");
 }

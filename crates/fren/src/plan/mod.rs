@@ -57,7 +57,11 @@ pub fn plan_with_year(
                 continue;
             }
             let new_name = compute_new_name(&item, slug_opts, current_year);
-            let old_name = item.path.file_name().map(OsString::from).unwrap_or_default();
+            let old_name = item
+                .path
+                .file_name()
+                .map(OsString::from)
+                .unwrap_or_default();
             if Some(new_name.as_os_str()) == Some(old_name.as_os_str()) {
                 // No-op; nothing to rename.
                 continue;
@@ -93,7 +97,11 @@ fn compute_new_name(
     slug_opts: &SlugOpts,
     current_year: i32,
 ) -> OsString {
-    let raw_name = item.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let raw_name = item
+        .path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     match item.kind {
         ItemKind::Dir => slugify_camel_iso_with_year(&raw_name, slug_opts, current_year).into(),
         ItemKind::File | ItemKind::Symlink => {

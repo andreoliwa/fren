@@ -26,10 +26,7 @@ pub fn execute_with_log(
     plans: &[RenamePlan],
     log_sink: &mut dyn LogSink,
 ) -> Result<ExecutionReport, FrenError> {
-    let batch_id = plans
-        .first()
-        .map(|p| p.batch_id)
-        .unwrap_or_else(Uuid::nil);
+    let batch_id = plans.first().map(|p| p.batch_id).unwrap_or_else(Uuid::nil);
 
     let mut applied = 0usize;
     let mut errors: Vec<FrenError> = Vec::new();
@@ -40,9 +37,7 @@ pub fn execute_with_log(
 
         let outcome = match atomic::rename(from, &to_path) {
             Ok(()) => Ok(()),
-            Err(FrenError::TargetExists(_))
-                if case_only::is_case_only_rename(from, &to_path) =>
-            {
+            Err(FrenError::TargetExists(_)) if case_only::is_case_only_rename(from, &to_path) => {
                 case_only::rename_via_temp(from, &to_path)
             }
             Err(e) => Err(e),

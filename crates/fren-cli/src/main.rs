@@ -141,7 +141,8 @@ fn run_merge(
     target: &std::path::Path,
     sources: &[std::path::PathBuf],
 ) -> Result<(), fren::FrenError> {
-    let source_refs: Vec<&std::path::Path> = sources.iter().map(std::path::PathBuf::as_path).collect();
+    let source_refs: Vec<&std::path::Path> =
+        sources.iter().map(std::path::PathBuf::as_path).collect();
     let dry_run = !cli.apply;
     let report = fren::merge_directories(target, &source_refs, dry_run)?;
     if dry_run {
@@ -196,8 +197,8 @@ fn format_merge_line(to: &std::path::Path, from: &std::path::Path) -> String {
     let to_split = to_parts.len() - common;
     let from_split = from_parts.len() - common;
 
-    let bright = style_new_dir();    // bright blue = changed dir part (matches dir rename color)
-    let dim = style_old_name();      // bright white = unchanged common suffix (was white; dim looked weird)
+    let bright = style_new_dir(); // bright blue = changed dir part (matches dir rename color)
+    let dim = style_old_name(); // bright white = unchanged common suffix (was white; dim looked weird)
 
     let to_prefix = join_components(&to_parts[..to_split], to_str.starts_with('/'));
     let to_suffix = join_components(&to_parts[to_split..], false);
@@ -253,7 +254,11 @@ fn format_rename_line(plan: &fren::RenamePlan) -> String {
     let trailing = if is_dir { "/" } else { "" };
 
     let new = plan.new_name.to_string_lossy();
-    let new_style = if is_dir { style_new_dir() } else { style_new_file() };
+    let new_style = if is_dir {
+        style_new_dir()
+    } else {
+        style_new_file()
+    };
 
     let old_name = plan.old_name.to_string_lossy();
     let parent_str = plan.parent.to_string_lossy();
@@ -292,7 +297,10 @@ fn run_rename(
         apply: cli.apply,
     };
 
-    let roots: Vec<&std::path::Path> = directories.iter().map(std::path::PathBuf::as_path).collect();
+    let roots: Vec<&std::path::Path> = directories
+        .iter()
+        .map(std::path::PathBuf::as_path)
+        .collect();
 
     // Dry-run uses high-level fren::rename(); apply path uses the explicit
     // plan + execute_with_log so we can write the transaction log.
@@ -308,11 +316,7 @@ fn run_rename(
         let report = if cli.no_log || plans.is_empty() {
             fren::execute(&plans)?
         } else {
-            let mut sink = fren::JsonlLogSink::open(
-                cli.log_dir.as_deref(),
-                batch_id,
-                &ts,
-            )?;
+            let mut sink = fren::JsonlLogSink::open(cli.log_dir.as_deref(), batch_id, &ts)?;
             // Header
             sink.append(&fren::LogRecord::Batch {
                 v: 1,

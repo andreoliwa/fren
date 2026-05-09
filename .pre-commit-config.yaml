@@ -7,10 +7,7 @@ ci:
   autofix_commit_msg: "chore(deps): auto fixes from pre-commit.com hooks\n\nfor more information, see https://pre-commit.ci"
   autoupdate_commit_msg: "chore(deps): pre-commit autoupdate"
 
-default_language_version:
-  python: python3.13
-
-exclude: '^(\.tox|ci/templates|\.bumpversion\.cfg)(/|$)'
+exclude: '^(target|\.tox|ci/templates|\.bumpversion\.cfg)(/|$)'
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -18,7 +15,6 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
         exclude: '\.golden$'
-      - id: debug-statements
   - repo: https://github.com/pappasam/toml-sort
     rev: v0.24.4
     hooks:
@@ -28,16 +24,9 @@ repos:
     rev: v0.8.0
     hooks:
       - id: keep-sorted
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.12
-    hooks:
-      - id: ruff-format
-      - id: ruff-check
-        args: [--fix]
   - repo: https://github.com/pre-commit/pygrep-hooks
     rev: v1.10.0
     hooks:
-      - id: python-check-mock-methods
       - id: rst-backticks
   - repo: https://github.com/shellcheck-py/shellcheck-py
     rev: v0.11.0.1
@@ -61,7 +50,19 @@ repos:
       - id: commitizen
         stages:
           - commit-msg
-  - repo: https://github.com/mxr/sync-pre-commit-deps
-    rev: v0.0.3
+  - repo: local
     hooks:
-      - id: sync-pre-commit-deps
+      - id: cargo-fmt
+        name: cargo fmt
+        description: Check Rust formatting with rustfmt
+        entry: cargo fmt --all -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+      - id: cargo-clippy
+        name: cargo clippy
+        description: Lint Rust code with clippy (deny warnings)
+        entry: cargo clippy --workspace --all-targets -- -D warnings
+        language: system
+        types: [rust]
+        pass_filenames: false

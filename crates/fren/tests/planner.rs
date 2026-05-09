@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
 //! Integration tests for the planner.
 
 use fren::{plan_with_year, ConflictPolicy, ItemKind, PlanOpts, SlugOpts};
@@ -41,7 +43,13 @@ fn walks_recursively_and_skips_hidden() {
 
     let originals: Vec<_> = plans
         .iter()
-        .map(|p| p.original_path.strip_prefix(tmp.path()).unwrap().to_string_lossy().into_owned())
+        .map(|p| {
+            p.original_path
+                .strip_prefix(tmp.path())
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
 
     // Hidden dir + file excluded; subdir + its contents present.
@@ -108,7 +116,13 @@ fn no_op_renames_are_filtered() {
     // The good file should NOT appear in the plan.
     let originals: Vec<_> = plans
         .iter()
-        .map(|p| p.original_path.file_name().unwrap().to_string_lossy().into_owned())
+        .map(|p| {
+            p.original_path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .into_owned()
+        })
         .collect();
     assert!(
         !originals.iter().any(|n| n == "already-good.txt"),

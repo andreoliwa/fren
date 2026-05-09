@@ -104,12 +104,18 @@ fn unique_file_name_avoiding(path: &Path, taken: &HashSet<PathBuf>) -> PathBuf {
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let ext = current.extension().map(|e| e.to_string_lossy().into_owned());
+        let ext = current
+            .extension()
+            .map(|e| e.to_string_lossy().into_owned());
 
         let (orig_stem, next_idx) = match unique_re().captures(&stem) {
             Some(caps) => {
                 #[allow(clippy::expect_used)]
-                let orig = caps.name("orig").expect("regex named group orig").as_str().to_string();
+                let orig = caps
+                    .name("orig")
+                    .expect("regex named group orig")
+                    .as_str()
+                    .to_string();
                 let idx_next = caps
                     .name("idx")
                     .and_then(|m| m.as_str().parse::<u32>().ok())
@@ -118,7 +124,11 @@ fn unique_file_name_avoiding(path: &Path, taken: &HashSet<PathBuf>) -> PathBuf {
             }
             None => (stem, 0),
         };
-        let suffix_num = if next_idx == 0 { String::new() } else { next_idx.to_string() };
+        let suffix_num = if next_idx == 0 {
+            String::new()
+        } else {
+            next_idx.to_string()
+        };
         let new_stem = format!("{orig_stem}_Copy{suffix_num}");
         let new_name = match &ext {
             Some(e) if !e.is_empty() => format!("{new_stem}.{e}"),
@@ -195,12 +205,18 @@ pub fn unique_file_name(path: &Path) -> PathBuf {
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let ext = current.extension().map(|e| e.to_string_lossy().into_owned());
+        let ext = current
+            .extension()
+            .map(|e| e.to_string_lossy().into_owned());
 
         let (orig_stem, next_idx) = match unique_re().captures(&stem) {
             Some(caps) => {
                 #[allow(clippy::expect_used)]
-                let orig = caps.name("orig").expect("regex named group orig").as_str().to_string();
+                let orig = caps
+                    .name("orig")
+                    .expect("regex named group orig")
+                    .as_str()
+                    .to_string();
                 let idx_next = caps
                     .name("idx")
                     .and_then(|m| m.as_str().parse::<u32>().ok())
