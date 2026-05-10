@@ -1,0 +1,17 @@
+[[package]]
+name = "fren"
+semver_check = true
+
+[[package]]
+name = "fren-cli"
+semver_check = false
+
+[workspace]
+# cargo-dist owns the GitHub Release; release-plz handles versioning + crates.io only
+git_release_enable = false
+git_tag_enable = true
+changelog_update = true
+semver_check = true
+publish = true
+# Stay in 0.x: breaking changes bump 0.X.0, never auto-promote to 1.0.0
+publish_allow_dirty = false

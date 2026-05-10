@@ -1,0 +1,56 @@
+[changelog]
+header = "# Changelog\n\n"
+body = """
+{% if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [Unreleased]
+{% endif %}\
+{%- set groups = ["Features", "Bug Fixes", "Performance", "Testing", "Documentation", "Refactoring"] %}
+{%- for group in groups %}
+{%- set scoped = commits | filter(attribute="group", value=group) | filter(attribute="scope") | sort(attribute="scope") %}
+{%- set all_group = commits | filter(attribute="group", value=group) | sort(attribute="message") %}
+{#- Tera's filter(attribute="scope", value="") silently returns empty when value is "" (treats it as falsy).
+    Scopeless commits have scope="" not null, so the original scoped/scopeless split produced an empty list.
+    Fix: build scoped (non-empty scope) + all_group, then deduplicate by id. #}
+{%- set group_commits = scoped | concat(with=all_group) | unique(attribute="id") %}
+{%- if group_commits %}
+
+### {{ group }}
+{% for commit in group_commits %}
+- {% if commit.breaking %}**BREAKING** {% endif %}\
+{% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | upper_first }}\
+{% if commit.remote.pr_number %} ([#{{ commit.remote.pr_number }}](https://github.com/andreoliwa/fren/pull/{{ commit.remote.pr_number }})){% endif %} \
+([{{ commit.id | truncate(length=7, end="") }}](https://github.com/andreoliwa/fren/commit/{{ commit.id }}))
+{%- endfor %}
+{%- endif %}
+{%- endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+filter_commits = true
+protect_breaking_commits = true
+sort_commits = "newest"
+tag_pattern = "v[0-9]*"
+skip_tags = ""
+ignore_tags = ""
+commit_parsers = [
+  {message = "^feat", group = "Features"},
+  {message = "^fix", group = "Bug Fixes"},
+  {message = "^perf", group = "Performance"},
+  {message = "^refactor", group = "Refactoring"},
+  {message = "^docs", group = "Documentation"},
+  {message = "^test", group = "Testing"},
+  {message = "^chore|^build|^ci|^revert", skip = true}
+]
+link_parsers = [
+  {pattern = "#(\\d+)", href = "https://github.com/andreoliwa/fren/issues/$1"}
+]
+
+[remote.github]
+owner = "andreoliwa"
+repo = "fren"

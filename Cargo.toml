@@ -1,3 +1,9 @@
+# The profile that 'dist' will build with
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
 [profile.release]
 codegen-units = 1
 lto = "thin"
@@ -26,11 +32,19 @@ uuid = {features = ["serde", "v7"], version = "1"}
 walkdir = "2"
 
 [workspace.metadata.dist]
-# Placeholder - populated by `cargo dist init` in a later commit.
 cargo-dist-version = "0.31.0"
 ci = ["github"]
-installers = []
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+installers = ["shell", "powershell", "homebrew"]
+targets = [
+  "aarch64-apple-darwin",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "x86_64-pc-windows-msvc",
+  "x86_64-unknown-linux-gnu",
+  "x86_64-unknown-linux-musl"
+]
+pr-run-mode = "plan"
+publish-jobs = ["homebrew"]
 
 [workspace.package]
 authors = ["W. Augusto Andreoli <andreoliwa@sent.com>"]
