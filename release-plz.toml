@@ -1,66 +1,67 @@
 # FIRST-RELEASE BOOTSTRAP CHECKLIST
-# Before the first crates.io publish, several flags must be disabled to avoid
-# failures. Re-enable them after the first successful manual publish.
+# Several flags must be disabled before the first crates.io publish. They
+# cause hard failures until a version exists on crates.io to compare against.
+# Re-enable all of them after the first successful manual publish (Step 4).
 #
-# Step 1 - Before first publish:
-# - Set publish = false at [workspace] level (release-plz downloads a
-# crates.io tarball to compare file lists; fails if package never published)
-# - Set publish = false per [[package]] for any crate with publish = false
-# in its Cargo.toml (cargo itself enforces this too)
-# - Set semver_check = false (requires a published version on crates.io)
-# - Set semver_check = false per [[package]] for binary crates (fren-cli
-# has no public API surface, so semver_check is meaningless for it)
+# Step 1 - Before first publish, add bootstrap flags:
+# - Set publish = false at [workspace] level. release-plz downloads the
+# crates.io tarball to diff file lists; fails if the package was never
+# published. Without this flag, release-plz will try (and fail) to publish.
+# - Set publish = false per [[package]] for crates that have publish = false
+# in their own Cargo.toml. cargo itself enforces this too; release-plz
+# must agree or it will attempt to publish and fail.
+# - Set semver_check = false at [workspace] level. semver_check downloads the
+# previous crates.io version to compare the public API; fails with no
+# published version.
+# - Set semver_check = false per [[package]] for binary crates. Binary crates
+# have no public API surface, so semver_check is always irrelevant for them
+# (keep this flag permanently even after Step 4).
 #
-# Step 2 - Pre-publish name check:
-# Before publishing, verify each crate name is available on crates.io:
+# Step 2 - Pre-publish name check (do this BEFORE writing any code):
+# Verify every crate name is available on crates.io:
 # https://crates.io/crates/<name>
 # If a name is taken, rename the crate BEFORE the first publish. Renaming
 # after publishing is painful: every file that imports the crate by name
-# (use <name>::, Cargo.toml deps, workspace members) must be updated.
+# (use <name>::, Cargo.toml [dependencies], [workspace] members) must be
+# updated. crates.io names are case-insensitive and permanent - a yanked
+# crate still holds its name and you cannot claim it.
 #
-# Step 3 - Manual first publish (in dependency order, ~30s between each):
+# Step 3 - Manual first publish (in dependency order):
+# First, remove publish = false from each crate's own Cargo.toml (not this
+# file - the crate's own Cargo.toml under crates/<name>/Cargo.toml).
+# Then publish in dependency order with ~30s between each to let crates.io
+# index propagate (dependents will fail if their dep isn't indexed yet):
 # cargo publish -p slug-preserve
-# cargo publish -p fren-core
-# cargo publish -p fren-cli
-# Note: remove publish = false from each crate's own Cargo.toml first.
+# cargo publish -p fren-date
+# cargo publish -p fren-date-cli
+# After merging the first release PR, release-plz will handle future
+# publishes automatically. Note: crates published manually outside
+# release-plz will not appear in the first auto-generated release PR body -
+# only crates with unreleased commits since the last tag are included.
 #
-# Step 4 - After first successful publish, re-enable:
-# - Remove publish = false from [workspace] and all [[package]] blocks below
+# Step 4 - After first successful publish, remove bootstrap flags:
+# - Remove publish = false from [workspace] and all [[package]] blocks
+# (except keep the [[package]] block for binary crates that still need
+# semver_check = false)
 # - Set semver_check = true in [workspace]
-# - Remove semver_check = false from [[package]] blocks (or keep for binaries)
+# - Push these changes so the next release-plz PR runs with correct config
 #
 # Step 5 - GitHub Actions permission (one-time repo setting):
-# release-plz opens Release PRs via the GitHub API. The default Actions
-# permission level does NOT allow PR creation. Fix:
+# release-plz opens Release PRs via the GitHub API. The default GitHub
+# Actions permission level does NOT allow PR creation. Fix once per repo:
 # GitHub repo -> Settings -> Actions -> General -> Workflow permissions
 # -> enable "Allow GitHub Actions to create and approve pull requests"
-# Without this, release-plz-pr job fails with HTTP 403.
-
-[[package]]
-name = "fren-date"
-# bootstrap: remove after first crates.io publish
-publish = false
+# Without this, the release-plz-pr job fails with HTTP 403 on every run.
 
 [[package]]
 name = "fren-date-cli"
-# bootstrap: remove after first crates.io publish
-publish = false
 # binary crates have no public API; semver_check is always irrelevant
 semver_check = false
-
-[[package]]
-name = "slug-preserve"
-# bootstrap: remove after first crates.io publish
-publish = false
 
 [workspace]
 # cargo-dist owns the GitHub Release; release-plz handles versioning + crates.io only
 git_release_enable = false
 git_tag_enable = true
 changelog_update = true
-# bootstrap: enable after first crates.io publish (needs a published version to compare)
-semver_check = false
-# bootstrap: enable after first crates.io publish (release-plz downloads crates.io
-# tarball to compare file lists; fails when no version is published yet)
-publish = false
+semver_check = true
 publish_allow_dirty = false
