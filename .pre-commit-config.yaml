@@ -6,6 +6,10 @@ ci:
   autoupdate_schedule: quarterly
   autofix_commit_msg: "chore(deps): auto fixes from pre-commit.com hooks\n\nfor more information, see https://pre-commit.ci"
   autoupdate_commit_msg: "chore(deps): pre-commit autoupdate"
+  # Cargo is not available in the pre-commit.ci sandbox; local git hooks still run both.
+  skip:
+    - cargo-fmt
+    - cargo-clippy
 
 exclude: '^(target|\.tox|ci/templates|\.bumpversion\.cfg)(/|$)'
 repos:
