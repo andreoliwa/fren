@@ -15,6 +15,7 @@ unwrap_used = "deny"
 [package]
 description = "Case-preserving slugifier with Unicode PUA sentinel support (internal to fren)"
 name = "slug-preserve"
+readme = "README.md"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
