@@ -1,6 +1,15 @@
 [[package]]
+name = "fren"
+publish = false
+
+[[package]]
 name = "fren-cli"
+publish = false
 semver_check = false
+
+[[package]]
+name = "slug-preserve"
+publish = false
 
 [workspace]
 # cargo-dist owns the GitHub Release; release-plz handles versioning + crates.io only
