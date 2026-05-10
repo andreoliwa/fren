@@ -42,7 +42,7 @@ name = "fren-date"
 publish = false
 
 [[package]]
-name = "fren-cli"
+name = "fren-date-cli"
 # bootstrap: remove after first crates.io publish
 publish = false
 # binary crates have no public API; semver_check is always irrelevant

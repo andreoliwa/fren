@@ -10,7 +10,7 @@ lto = "thin"
 strip = "symbols"
 
 [workspace]
-members = ["crates/fren-date", "crates/fren-cli", "crates/slug-preserve"]
+members = ["crates/fren-date", "crates/fren-date-cli", "crates/slug-preserve"]
 resolver = "2"
 
 [workspace.dependencies]

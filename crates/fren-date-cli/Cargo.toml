@@ -16,7 +16,7 @@ tempfile.workspace = true
 
 [package]
 description = "fren - file renamer that understands dates (CLI)"
-name = "fren-cli"
+name = "fren-date-cli"
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
