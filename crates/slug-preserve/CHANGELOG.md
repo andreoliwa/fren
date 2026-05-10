@@ -11,4 +11,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
-- *(slug-preserve)* add README and wire readme field in Cargo.toml
+- _(slug-preserve)_ add README and wire readme field in Cargo.toml
