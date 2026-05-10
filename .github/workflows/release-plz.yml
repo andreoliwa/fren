@@ -1,11 +1,29 @@
 name: Release-plz
 
-# FIRST-RELEASE SETUP REQUIRED (one-time, per repo):
-# release-plz-pr opens a Release PR via the GitHub API. By default, GitHub
-# Actions cannot create PRs. You must enable this manually:
-#   GitHub repo -> Settings -> Actions -> General -> Workflow permissions
-#   -> enable "Allow GitHub Actions to create and approve pull requests"
-# Without this, the release-plz-pr job fails with HTTP 403.
+# SETUP REQUIRED (one-time, per repo):
+#
+# 1. GitHub Actions PR permission:
+#    release-plz-pr opens Release PRs via the GitHub API. By default, GitHub
+#    Actions cannot create PRs. Enable once:
+#      GitHub repo -> Settings -> Actions -> General -> Workflow permissions
+#      -> enable "Allow GitHub Actions to create and approve pull requests"
+#    Without this, release-plz-pr fails with HTTP 403.
+#
+# 2. CARGO_REGISTRY_TOKEN secret:
+#    Required for release-plz-release to publish to crates.io.
+#    Create at crates.io -> Account Settings -> API Tokens, then add as:
+#      GitHub repo -> Settings -> Secrets and variables -> Actions
+#      -> New repository secret: CARGO_REGISTRY_TOKEN
+#    Without this, the release job fails with "please provide a non-empty token".
+#
+# 3. RELEASE_PLZ_TOKEN secret (PAT):
+#    release-plz-release pushes git tags. Tags pushed with GITHUB_TOKEN do NOT
+#    trigger other workflows (GitHub anti-loop policy). This means cargo-dist's
+#    release.yml never fires and no binaries are built.
+#    Fix: create a fine-grained PAT with Contents: Read+Write for this repo,
+#    add it as secret RELEASE_PLZ_TOKEN, and use it in release-plz-release
+#    (see the env block below). Tags pushed via PAT are attributed to the human
+#    owner and DO trigger release.yml.
 #
 # INPUT NAME: the action input is `manifest_path` (underscore), NOT
 # `manifest-path` (hyphen). Using the wrong name silently falls back to
@@ -60,5 +78,7 @@ jobs:
           command: release
           manifest_path: Cargo.toml
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use PAT so the tag push triggers release.yml (cargo-dist).
+          # GITHUB_TOKEN tag pushes are blocked from triggering workflows.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
