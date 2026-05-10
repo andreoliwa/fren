@@ -52,3 +52,41 @@ fn title_case(input: &str) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preserve_unchanged() {
+        assert_eq!(apply("Hello-World", CaseMode::Preserve), "Hello-World");
+    }
+
+    #[test]
+    fn lower_lowercases() {
+        assert_eq!(apply("Hello-World", CaseMode::Lower), "hello-world");
+    }
+
+    #[test]
+    fn upper_uppercases() {
+        assert_eq!(apply("Hello-World", CaseMode::Upper), "HELLO-WORLD");
+    }
+
+    #[test]
+    fn title_capitalizes_each_word() {
+        assert_eq!(apply("hello-world", CaseMode::Title), "Hello-World");
+    }
+
+    #[test]
+    fn capitalize_same_as_title() {
+        assert_eq!(
+            apply("hello-world", CaseMode::Capitalize),
+            apply("hello-world", CaseMode::Title)
+        );
+    }
+
+    #[test]
+    fn title_case_lowercases_non_first_chars() {
+        assert_eq!(apply("HELLO WORLD", CaseMode::Title), "Hello World");
+    }
+}
