@@ -11,6 +11,8 @@ use fren::LogSink;
 use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 
+use anstream::ColorChoice;
+
 mod output;
 
 /// Style for new (target) FILE names. Bright green.
@@ -119,6 +121,13 @@ enum Command {
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
+    // Wire --color before any output so all anstream calls respect it.
+    match cli.color.as_str() {
+        "always" => ColorChoice::Always.write_global(),
+        "never" => ColorChoice::Never.write_global(),
+        _ => {} // "auto": anstream default; honors NO_COLOR / CLICOLOR_FORCE
+    }
+
     match run(cli) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
@@ -154,28 +163,30 @@ fn run_merge(
         sources.iter().map(std::path::PathBuf::as_path).collect();
     let dry_run = !cli.apply;
     let report = fren::merge_directories(target, &source_refs, dry_run)?;
-    if dry_run {
-        cprintln!("Would move {} file(s):", report.moved.len());
-        for m in &report.moved {
-            cprintln!("{}", format_merge_line(&m.to, &m.from));
+    if !cli.quiet {
+        if dry_run {
+            cprintln!("Would move {} file(s):", report.moved.len());
+            for m in &report.moved {
+                cprintln!("{}", format_merge_line(&m.to, &m.from));
+            }
+            if !report.moved.is_empty() {
+                cprintln!();
+                cprintln!("Re-run with --apply to perform the merge.");
+            }
+        } else {
+            for m in &report.moved {
+                cprintln!("{}", format_merge_line(&m.to, &m.from));
+            }
+            if !report.moved.is_empty() {
+                cprintln!();
+            }
+            let new_s = style_new_file();
+            cprintln!(
+                "{new_s}Moved {} file(s) into {}{new_s:#}",
+                report.moved.len(),
+                target.display()
+            );
         }
-        if !report.moved.is_empty() {
-            cprintln!();
-            cprintln!("Re-run with --apply to perform the merge.");
-        }
-    } else {
-        for m in &report.moved {
-            cprintln!("{}", format_merge_line(&m.to, &m.from));
-        }
-        if !report.moved.is_empty() {
-            cprintln!();
-        }
-        let new_s = style_new_file();
-        cprintln!(
-            "{new_s}Moved {} file(s) into {}{new_s:#}",
-            report.moved.len(),
-            target.display()
-        );
     }
     Ok(())
 }
@@ -405,24 +416,24 @@ fn run_rename(
     };
 
     if opts.apply {
-        // Abort policy: the first `report.applied` plans succeeded (in
-        // bottom-up order), the next one (if any) failed. Print the applied
-        // ones using the same format as dry-run so the user can verify
-        // what changed.
-        for plan in plans.iter().take(report.applied) {
-            cprintln!("{}", format_rename_line(plan));
-        }
-        if report.applied > 0 {
-            cprintln!();
-        }
-        let s = style_new_file();
-        cprintln!("{s}Renamed {} item(s).{s:#}", report.applied);
-        if !report.errors.is_empty() {
-            for e in &report.errors {
-                eprintln!("error: {e}");
+        if !cli.quiet {
+            // Abort policy: the first `report.applied` plans succeeded (in
+            // bottom-up order), the next one (if any) failed. Print the applied
+            // ones using the same format as dry-run so the user can verify
+            // what changed.
+            for plan in plans.iter().take(report.applied) {
+                cprintln!("{}", format_rename_line(plan));
             }
+            if report.applied > 0 {
+                cprintln!();
+            }
+            let s = style_new_file();
+            cprintln!("{s}Renamed {} item(s).{s:#}", report.applied);
         }
-    } else {
+        for e in &report.errors {
+            eprintln!("error: {e}");
+        }
+    } else if !cli.quiet {
         // Dry-run preview.
         if plans.is_empty() {
             cprintln!("All names already in canonical form.");
