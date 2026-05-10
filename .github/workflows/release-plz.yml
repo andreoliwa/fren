@@ -1,5 +1,20 @@
 name: Release-plz
 
+# FIRST-RELEASE SETUP REQUIRED (one-time, per repo):
+# release-plz-pr opens a Release PR via the GitHub API. By default, GitHub
+# Actions cannot create PRs. You must enable this manually:
+#   GitHub repo -> Settings -> Actions -> General -> Workflow permissions
+#   -> enable "Allow GitHub Actions to create and approve pull requests"
+# Without this, the release-plz-pr job fails with HTTP 403.
+#
+# INPUT NAME: the action input is `manifest_path` (underscore), NOT
+# `manifest-path` (hyphen). Using the wrong name silently falls back to
+# auto-discovery and can pick the wrong Cargo.toml in a workspace.
+#
+# fetch-depth: 0 is required. release-plz reads the full git history to
+# determine which commits landed since the last tag. Shallow clones
+# (fetch-depth: 1, the checkout default) cause it to miss commits.
+
 permissions:
   pull-requests: write
   contents: write

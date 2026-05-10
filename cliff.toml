@@ -1,3 +1,20 @@
+# CLIFF.TOML SETUP NOTES
+#
+# Group order: listed explicitly in the template below because git-cliff's
+# default alphabetical order differs from conventional changelog conventions.
+# The `groups` array in the Tera template controls display order.
+#
+# Scopeless commits workaround: Tera's filter(attribute="scope", value="")
+# silently returns an empty list when value="" (treats empty string as falsy).
+# Scopeless commits have scope="" not null, so a naive split into
+# "scoped" and "scopeless" lists leaves scopeless commits invisible.
+# Fix: build scoped (non-empty scope) + all_group, then deduplicate by id.
+# See the template body below.
+#
+# PR links: requires [remote.github] block at the bottom of this file.
+# commit.remote.pr_number is only populated when git-cliff can resolve
+# the commit to a GitHub PR via the API (or from the merge commit message).
+
 [changelog]
 header = "# Changelog\n\n"
 body = """
