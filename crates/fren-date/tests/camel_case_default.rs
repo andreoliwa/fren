@@ -6,7 +6,7 @@
 //! Counterparts in `parity_python_doctests.rs` set
 //! `split_camel = true` to match the original Python output.
 
-use fren::SlugOpts;
+use fren_date::SlugOpts;
 use slug_preserve::CaseMode;
 
 fn rust_default_opts() -> SlugOpts {
@@ -15,7 +15,7 @@ fn rust_default_opts() -> SlugOpts {
 }
 
 fn slug(input: &str) -> String {
-    fren::slugify_camel_iso_with_year(input, &rust_default_opts(), 2024)
+    fren_date::slugify_camel_iso_with_year(input, &rust_default_opts(), 2024)
 }
 
 // Bare CamelCase / PascalCase tokens stay intact.
@@ -90,7 +90,7 @@ fn explicit_split_camel_works() {
         case: CaseMode::Preserve,
         split_camel: true,
     };
-    let out = fren::slugify_camel_iso_with_year("WhatsApp Image", &opts, 2024);
+    let out = fren_date::slugify_camel_iso_with_year("WhatsApp Image", &opts, 2024);
     assert_eq!(out, "Whats-App-Image");
 }
 
@@ -101,6 +101,6 @@ fn explicit_split_camel_with_underscore_separator() {
         case: CaseMode::Preserve,
         split_camel: true,
     };
-    let out = fren::slugify_camel_iso_with_year("PascalCase", &opts, 2024);
+    let out = fren_date::slugify_camel_iso_with_year("PascalCase", &opts, 2024);
     assert_eq!(out, "Pascal_Case");
 }

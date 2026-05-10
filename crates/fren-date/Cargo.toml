@@ -23,7 +23,7 @@ unwrap_used = "deny"
 
 [package]
 description = "fren - file renamer that understands dates (library)"
-name = "fren"
+name = "fren-date"
 authors.workspace = true
 edition.workspace = true
 homepage.workspace = true

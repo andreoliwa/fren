@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-//! Integration tests for `fren::merge_directories`. Ports the Python
+//! Integration tests for `fren_date::merge_directories`. Ports the Python
 //! `test_merge_directories` and `test_unique_file_name` cases.
 
-use fren::{merge_directories, unique_file_name};
+use fren_date::{merge_directories, unique_file_name};
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;

@@ -13,7 +13,7 @@
 //! Tests use `SlugOpts { separator: '_', case: Capitalize }` to match the
 //! original Python output exactly.
 
-use fren::SlugOpts;
+use fren_date::SlugOpts;
 use slug_preserve::CaseMode;
 
 fn legacy_python_opts() -> SlugOpts {
@@ -28,7 +28,7 @@ fn legacy_python_opts() -> SlugOpts {
 }
 
 fn slug(input: &str) -> String {
-    fren::slugify_camel_iso_with_year(input, &legacy_python_opts(), 2019)
+    fren_date::slugify_camel_iso_with_year(input, &legacy_python_opts(), 2019)
 }
 
 // One test per Python doctest line, named after the input shape.
@@ -280,7 +280,10 @@ fn datetime_iso_minute_only_human() {
 // produces *something* (no panic, no empty string for non-empty input).
 #[test]
 fn smoke_function_runs_on_basic_input() {
-    let out =
-        fren::slugify_camel_iso_with_year("Hello World 2024-01-15.txt", &SlugOpts::default(), 2024);
+    let out = fren_date::slugify_camel_iso_with_year(
+        "Hello World 2024-01-15.txt",
+        &SlugOpts::default(),
+        2024,
+    );
     assert!(!out.is_empty(), "output should not be empty: got {out:?}");
 }

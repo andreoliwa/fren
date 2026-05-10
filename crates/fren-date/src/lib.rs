@@ -6,7 +6,7 @@
 //! ## Quick example
 //!
 //! ```
-//! use fren::{slugify_camel_iso_with_year, SlugOpts};
+//! use fren_date::{slugify_camel_iso_with_year, SlugOpts};
 //! use slug_preserve::CaseMode;
 //!
 //! let legacy_python = SlugOpts {

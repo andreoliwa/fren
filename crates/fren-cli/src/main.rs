@@ -7,7 +7,7 @@
 use anstream::println as cprintln;
 use anstyle::{AnsiColor, Color, Style};
 use clap::{CommandFactory, Parser, Subcommand};
-use fren::LogSink;
+use fren_date::LogSink;
 use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 
@@ -137,7 +137,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(cli: Cli) -> Result<(), fren::FrenError> {
+fn run(cli: Cli) -> Result<(), fren_date::FrenError> {
     match &cli.command {
         Command::Rename {
             directories,
@@ -158,11 +158,11 @@ fn run_merge(
     cli: &Cli,
     target: &std::path::Path,
     sources: &[std::path::PathBuf],
-) -> Result<(), fren::FrenError> {
+) -> Result<(), fren_date::FrenError> {
     let source_refs: Vec<&std::path::Path> =
         sources.iter().map(std::path::PathBuf::as_path).collect();
     let dry_run = !cli.apply;
-    let report = fren::merge_directories(target, &source_refs, dry_run)?;
+    let report = fren_date::merge_directories(target, &source_refs, dry_run)?;
     if !cli.quiet {
         if dry_run {
             cprintln!("Would move {} file(s):", report.moved.len());
@@ -269,8 +269,8 @@ fn join_components(parts: &[&str], leading_slash: bool) -> String {
 /// files, bright blue for directories). The old path is split into the
 /// unchanged parent (bright white) and the changed last component
 /// (white) so the eye sees exactly what's being renamed.
-fn format_rename_line(plan: &fren::RenamePlan) -> String {
-    let is_dir = matches!(plan.kind, fren::ItemKind::Dir);
+fn format_rename_line(plan: &fren_date::RenamePlan) -> String {
+    let is_dir = matches!(plan.kind, fren_date::ItemKind::Dir);
     let trailing = if is_dir { "/" } else { "" };
 
     let new = plan.new_name.to_string_lossy();
@@ -304,8 +304,8 @@ struct CliProgressSink {
     quiet: bool,
 }
 
-impl fren::ProgressSink for CliProgressSink {
-    fn on_rename(&mut self, plan: &fren::RenamePlan) {
+impl fren_date::ProgressSink for CliProgressSink {
+    fn on_rename(&mut self, plan: &fren_date::RenamePlan) {
         if !self.quiet {
             cprintln!("{}", format_rename_line(plan));
         }
@@ -328,16 +328,16 @@ fn run_rename(
     directories: &[std::path::PathBuf],
     exclude: &[std::path::PathBuf],
     split_camel: bool,
-) -> Result<(), fren::FrenError> {
-    let opts = fren::RenameOpts {
-        slugify: fren::SlugOpts {
+) -> Result<(), fren_date::FrenError> {
+    let opts = fren_date::RenameOpts {
+        slugify: fren_date::SlugOpts {
             split_camel,
-            ..fren::SlugOpts::default()
+            ..fren_date::SlugOpts::default()
         },
-        plan: fren::PlanOpts {
+        plan: fren_date::PlanOpts {
             recursive: true,
             exclude: exclude.to_vec(),
-            on_conflict: fren::ConflictPolicy::Abort,
+            on_conflict: fren_date::ConflictPolicy::Abort,
         },
         // `--apply` inverts the default-true `--dry-run`. Other flags
         // (verbose/quiet/color/log) wired in subsequent commits.
@@ -349,12 +349,12 @@ fn run_rename(
         .map(std::path::PathBuf::as_path)
         .collect();
 
-    // Dry-run uses high-level fren::rename(); apply path uses the explicit
+    // Dry-run uses high-level fren_date::rename(); apply path uses the explicit
     // plan + execute_with_log so we can write the transaction log.
     let (plans, report) = if !opts.apply {
-        fren::rename(&roots, &opts)?
+        fren_date::rename(&roots, &opts)?
     } else {
-        let plans = fren::plan(&roots, &opts.slugify, &opts.plan)?;
+        let plans = fren_date::plan(&roots, &opts.slugify, &opts.plan)?;
 
         if plans.is_empty() {
             cprintln!("All names already in canonical form.");
@@ -365,7 +365,7 @@ fn run_rename(
             // Non-TTY stdin without --yes: error rather than hang.
             if !io::stdin().is_terminal() {
                 eprintln!("error: --apply requires --yes when stdin is not a terminal");
-                return Err(fren::FrenError::InvalidInput(
+                return Err(fren_date::FrenError::InvalidInput(
                     "--apply requires --yes when stdin is not a terminal".to_string(),
                 ));
             }
@@ -379,7 +379,7 @@ fn run_rename(
                 eprint!("{}", preview);
             });
 
-            if !confirm_apply(plans.len()).map_err(|e| fren::FrenError::Io {
+            if !confirm_apply(plans.len()).map_err(|e| fren_date::FrenError::Io {
                 path: std::path::PathBuf::new(),
                 source: e,
             })? {
@@ -395,10 +395,10 @@ fn run_rename(
         let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
         let mut progress = CliProgressSink { quiet: cli.quiet };
         let report = if cli.no_log {
-            fren::execute_with_progress(&plans, &mut fren::NullLogSink, &mut progress)?
+            fren_date::execute_with_progress(&plans, &mut fren_date::NullLogSink, &mut progress)?
         } else {
-            let mut sink = fren::JsonlLogSink::open(cli.log_dir.as_deref(), batch_id, &ts)?;
-            sink.append(&fren::LogRecord::Batch {
+            let mut sink = fren_date::JsonlLogSink::open(cli.log_dir.as_deref(), batch_id, &ts)?;
+            sink.append(&fren_date::LogRecord::Batch {
                 v: 1,
                 id: batch_id,
                 ts: chrono::Utc::now().to_rfc3339(),
@@ -407,7 +407,7 @@ fn run_rename(
                 cwd: std::env::current_dir().unwrap_or_default(),
                 fren_version: env!("CARGO_PKG_VERSION").to_string(),
             })?;
-            let report = fren::execute_with_progress(&plans, &mut sink, &mut progress)?;
+            let report = fren_date::execute_with_progress(&plans, &mut sink, &mut progress)?;
             let status = if report.errors.is_empty() {
                 "ok"
             } else if report.applied > 0 {
@@ -415,7 +415,7 @@ fn run_rename(
             } else {
                 "error"
             };
-            sink.append(&fren::LogRecord::End {
+            sink.append(&fren_date::LogRecord::End {
                 v: 1,
                 ts: chrono::Utc::now().to_rfc3339(),
                 status: status.to_string(),

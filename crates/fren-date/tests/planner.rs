@@ -2,7 +2,7 @@
 
 //! Integration tests for the planner.
 
-use fren::{plan_with_year, ConflictPolicy, ItemKind, PlanOpts, SlugOpts};
+use fren_date::{plan_with_year, ConflictPolicy, ItemKind, PlanOpts, SlugOpts};
 use slug_preserve::CaseMode;
 use std::fs;
 use tempfile::TempDir;
@@ -150,7 +150,7 @@ fn within_batch_collision_detected() {
     );
 
     match result {
-        Err(fren::FrenError::WithinBatchCollision { .. }) => {}
+        Err(fren_date::FrenError::WithinBatchCollision { .. }) => {}
         other => panic!("expected WithinBatchCollision, got {other:?}"),
     }
 }
@@ -174,7 +174,7 @@ fn preexisting_target_aborts() {
     );
 
     match result {
-        Err(fren::FrenError::TargetExists(_)) => {}
+        Err(fren_date::FrenError::TargetExists(_)) => {}
         other => panic!("expected TargetExists, got {other:?}"),
     }
 }

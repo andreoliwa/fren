@@ -2,7 +2,7 @@
 
 //! Integration tests for the executor.
 
-use fren::{execute, plan_with_year, ConflictPolicy, PlanOpts, SlugOpts};
+use fren_date::{execute, plan_with_year, ConflictPolicy, PlanOpts, SlugOpts};
 use slug_preserve::CaseMode;
 use std::fs;
 use tempfile::TempDir;
@@ -92,7 +92,7 @@ fn aborts_when_target_exists_outside_batch() {
         2024,
     );
 
-    assert!(matches!(result, Err(fren::FrenError::TargetExists(_))));
+    assert!(matches!(result, Err(fren_date::FrenError::TargetExists(_))));
     // Both files should still exist (no I/O happened).
     assert!(tmp.path().join("Hello World.txt").exists());
     assert!(tmp.path().join("Hello-World.txt").exists());
@@ -104,13 +104,13 @@ fn does_not_overwrite_existing_file_on_execute() {
     // (TOCTOU window), atomic rename refuses to overwrite.
     let tmp = TempDir::new().unwrap();
     touch(tmp.path().join("source.txt"));
-    let plans = vec![fren::RenamePlan {
+    let plans = vec![fren_date::RenamePlan {
         original_path: tmp.path().join("source.txt"),
         parent: tmp.path().to_path_buf(),
         old_name: "source.txt".into(),
         new_name: "target.txt".into(),
         depth: 1,
-        kind: fren::ItemKind::File,
+        kind: fren_date::ItemKind::File,
         detected_date: None,
         batch_id: uuid::Uuid::nil(),
     }];
@@ -168,7 +168,7 @@ fn symlink_renamed_not_target() {
     assert_eq!(plans.len(), 1, "expected exactly one plan (the symlink)");
 
     let plan = &plans[0];
-    assert_eq!(plan.kind, fren::ItemKind::Symlink);
+    assert_eq!(plan.kind, fren_date::ItemKind::Symlink);
     assert_eq!(plan.old_name, std::ffi::OsStr::new("My Link.txt"));
     assert_eq!(plan.new_name, std::ffi::OsStr::new("My-Link.txt"));
 

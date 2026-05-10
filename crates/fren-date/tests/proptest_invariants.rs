@@ -8,7 +8,7 @@
 //!   - clean-abort  (zero renames happened, TargetExists returned)
 //!   - partial-with-complete-log (not yet tested; requires tx log feature)
 
-use fren::{execute, plan_with_year, ConflictPolicy, FrenError, PlanOpts, SlugOpts};
+use fren_date::{execute, plan_with_year, ConflictPolicy, FrenError, PlanOpts, SlugOpts};
 use proptest::prelude::*;
 use slug_preserve::CaseMode;
 use std::collections::BTreeMap;
