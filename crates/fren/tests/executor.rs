@@ -134,3 +134,61 @@ fn empty_plans_succeed_with_zero_applied() {
     assert_eq!(report.applied, 0);
     assert_eq!(report.errors.len(), 0);
 }
+
+#[test]
+#[cfg(unix)]
+fn symlink_renamed_not_target() {
+    // Symlinks must be renamed as opaque filesystem entries - the link
+    // itself moves, the target file is never touched or followed.
+    let tmp = TempDir::new().unwrap();
+
+    // Target lives outside the scanned tree so fren never touches it.
+    let target_dir = TempDir::new().unwrap();
+    touch(target_dir.path().join("real-file.txt"));
+
+    // Symlink with a name fren will slugify; points outside the batch.
+    std::os::unix::fs::symlink(
+        target_dir.path().join("real-file.txt"),
+        tmp.path().join("My Link.txt"),
+    )
+    .unwrap();
+
+    let plans = plan_with_year(
+        &[tmp.path()],
+        &rust_default_opts(),
+        &PlanOpts {
+            recursive: true,
+            ..PlanOpts::default()
+        },
+        2024,
+    )
+    .unwrap();
+
+    // Only the symlink is in-scope; target is in a different tree.
+    assert_eq!(plans.len(), 1, "expected exactly one plan (the symlink)");
+
+    let plan = &plans[0];
+    assert_eq!(plan.kind, fren::ItemKind::Symlink);
+    assert_eq!(plan.old_name, std::ffi::OsStr::new("My Link.txt"));
+    assert_eq!(plan.new_name, std::ffi::OsStr::new("My-Link.txt"));
+
+    let report = execute(&plans).unwrap();
+    assert_eq!(report.applied, 1);
+    assert_eq!(report.errors.len(), 0);
+
+    // Renamed symlink is still a symlink and still resolves to the target.
+    let new_link = tmp.path().join("My-Link.txt");
+    assert!(
+        new_link
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink(),
+        "renamed entry must still be a symlink"
+    );
+    assert!(new_link.exists(), "symlink must still resolve after rename");
+
+    // Old symlink name gone; target file untouched.
+    assert!(!tmp.path().join("My Link.txt").exists());
+    assert!(target_dir.path().join("real-file.txt").exists());
+}
