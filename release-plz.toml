@@ -13,3 +13,7 @@ semver_check = false
 publish = true
 # Stay in 0.x: breaking changes bump 0.X.0, never auto-promote to 1.0.0
 publish_allow_dirty = false
+# release_always: open a Release PR even when release-plz cannot find a previous
+# published version on crates.io to compare against (first-release bootstrap).
+# Remove after fren 0.2.0 is published.
+release_always = true
