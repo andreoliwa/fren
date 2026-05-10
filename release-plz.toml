@@ -1,8 +1,4 @@
 [[package]]
-name = "fren"
-semver_check = true
-
-[[package]]
 name = "fren-cli"
 semver_check = false
 
@@ -11,7 +7,9 @@ semver_check = false
 git_release_enable = false
 git_tag_enable = true
 changelog_update = true
-semver_check = true
+# semver_check requires a previously published version on crates.io for comparison.
+# Enable once fren 0.2.0 is published.
+semver_check = false
 publish = true
 # Stay in 0.x: breaking changes bump 0.X.0, never auto-promote to 1.0.0
 publish_allow_dirty = false
