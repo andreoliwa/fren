@@ -49,7 +49,9 @@ mod merge;
 mod plan;
 mod slugify;
 
-pub use execute::{execute, execute_with_log};
+pub use execute::{
+    execute, execute_with_log, execute_with_progress, NullProgressSink, ProgressSink,
+};
 pub use log::{JsonlLogSink, LogRecord, LogSink, NullLogSink};
 pub use merge::{merge_directories, unique_file_name, MergeMove, MergeReport};
 pub use plan::{plan, plan_with_year, sort_bottom_up};

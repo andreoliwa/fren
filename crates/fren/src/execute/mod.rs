@@ -12,6 +12,26 @@ use crate::{ExecutionReport, FrenError, RenamePlan};
 use chrono::Utc;
 use uuid::Uuid;
 
+/// Callback invoked after each successful rename during execution.
+///
+/// Implement this in the caller (e.g. the CLI) to stream rename output as
+/// each operation completes, rather than buffering and printing after the
+/// full batch. The library calls `on_rename` with the completed plan; the
+/// implementation decides how (or whether) to display it.
+///
+/// A no-op implementation is provided via [`NullProgressSink`].
+pub trait ProgressSink {
+    /// Called immediately after a rename succeeds.
+    fn on_rename(&mut self, plan: &RenamePlan);
+}
+
+/// No-op [`ProgressSink`]. Used by [`execute`] and [`execute_with_log`].
+pub struct NullProgressSink;
+
+impl ProgressSink for NullProgressSink {
+    fn on_rename(&mut self, _plan: &RenamePlan) {}
+}
+
 /// Apply a sorted plan vector with no transaction logging.
 ///
 /// Equivalent to [`execute_with_log`] using a [`NullLogSink`]. Convenience
@@ -25,6 +45,19 @@ pub fn execute(plans: &[RenamePlan]) -> Result<ExecutionReport, FrenError> {
 pub fn execute_with_log(
     plans: &[RenamePlan],
     log_sink: &mut dyn LogSink,
+) -> Result<ExecutionReport, FrenError> {
+    execute_with_progress(plans, log_sink, &mut NullProgressSink)
+}
+
+/// Apply a sorted plan vector, recording to `log_sink` and calling
+/// `progress` after each successful rename.
+///
+/// This is the core executor. [`execute`] and [`execute_with_log`] are
+/// convenience wrappers that supply a [`NullProgressSink`].
+pub fn execute_with_progress(
+    plans: &[RenamePlan],
+    log_sink: &mut dyn LogSink,
+    progress: &mut dyn ProgressSink,
 ) -> Result<ExecutionReport, FrenError> {
     let batch_id = plans.first().map(|p| p.batch_id).unwrap_or_else(Uuid::nil);
 
@@ -46,6 +79,7 @@ pub fn execute_with_log(
         match outcome {
             Ok(()) => {
                 applied += 1;
+                progress.on_rename(plan);
                 let kind = match plan.kind {
                     ItemKind::File => "file",
                     ItemKind::Dir => "dir",

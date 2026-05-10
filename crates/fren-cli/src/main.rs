@@ -300,6 +300,18 @@ fn format_rename_line(plan: &fren::RenamePlan) -> String {
     )
 }
 
+struct CliProgressSink {
+    quiet: bool,
+}
+
+impl fren::ProgressSink for CliProgressSink {
+    fn on_rename(&mut self, plan: &fren::RenamePlan) {
+        if !self.quiet {
+            cprintln!("{}", format_rename_line(plan));
+        }
+    }
+}
+
 fn confirm_apply(n: usize) -> io::Result<bool> {
     eprint!("Apply {} rename(s)? [y/N] ", n);
     let _ = io::stderr().flush();
@@ -381,8 +393,9 @@ fn run_rename(
             .map(|p| p.batch_id)
             .unwrap_or_else(uuid::Uuid::nil);
         let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+        let mut progress = CliProgressSink { quiet: cli.quiet };
         let report = if cli.no_log {
-            fren::execute(&plans)?
+            fren::execute_with_progress(&plans, &mut fren::NullLogSink, &mut progress)?
         } else {
             let mut sink = fren::JsonlLogSink::open(cli.log_dir.as_deref(), batch_id, &ts)?;
             sink.append(&fren::LogRecord::Batch {
@@ -394,7 +407,7 @@ fn run_rename(
                 cwd: std::env::current_dir().unwrap_or_default(),
                 fren_version: env!("CARGO_PKG_VERSION").to_string(),
             })?;
-            let report = fren::execute_with_log(&plans, &mut sink)?;
+            let report = fren::execute_with_progress(&plans, &mut sink, &mut progress)?;
             let status = if report.errors.is_empty() {
                 "ok"
             } else if report.applied > 0 {
@@ -417,21 +430,18 @@ fn run_rename(
 
     if opts.apply {
         if !cli.quiet {
-            // Abort policy: the first `report.applied` plans succeeded (in
-            // bottom-up order), the next one (if any) failed. Print the applied
-            // ones using the same format as dry-run so the user can verify
-            // what changed.
-            for plan in plans.iter().take(report.applied) {
-                cprintln!("{}", format_rename_line(plan));
-            }
             if report.applied > 0 {
                 cprintln!();
             }
             let s = style_new_file();
             cprintln!("{s}Renamed {} item(s).{s:#}", report.applied);
         }
-        for e in &report.errors {
-            eprintln!("error: {e}");
+        if !report.errors.is_empty() {
+            eprintln!("---");
+            eprintln!(
+                "error after {} rename(s): {}",
+                report.applied, report.errors[0]
+            );
         }
     } else if !cli.quiet {
         // Dry-run preview.
