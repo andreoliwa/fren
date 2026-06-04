@@ -104,3 +104,21 @@ fn explicit_split_camel_with_underscore_separator() {
     let out = fren_date::slugify_camel_iso_with_year("PascalCase", &opts, 2024);
     assert_eq!(out, "Pascal_Case");
 }
+
+#[test]
+fn iso_t_datetime_without_seconds() {
+    // 2026-05-27T1321 -> 2026-05-27T13-21-00
+    assert_eq!(
+        slug("my-file-2026-05-27T1321"),
+        "my-file-2026-05-27T13-21-00"
+    );
+}
+
+#[test]
+fn compact_datetime_without_seconds() {
+    // 202605271321 -> 2026-05-27T13-21-00
+    assert_eq!(
+        slug("my-file-202605271321"),
+        "my-file-2026-05-27T13-21-00"
+    );
+}

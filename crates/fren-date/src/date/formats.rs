@@ -94,6 +94,8 @@ pub const POSSIBLE_FORMATS: &[FormatSpec] = &[
     spec("YY_MM_DD_HH_mm_ss"),
     spec("YYYY_MM_DD_HH_mm_ss"),
     spec("YYYY_MM_DD_HH_mm"),
+    spec("YYYY_MM_DD_HHmm"),
     spec("YYYYMMDDHHmmss"),
     spec("YYYYMMDD_HHmmss"),
+    spec("YYYYMMDDHHmm"),
 ];

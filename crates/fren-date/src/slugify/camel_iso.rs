@@ -53,6 +53,18 @@ fn re_existing_time() -> &'static Regex {
     })
 }
 
+fn re_iso_t_sep() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        // Normalize ISO 8601 `T` separator between date and time digits into
+        // the pipeline separator so the date parser can match across it.
+        // Matches only when `T` sits between two digits to avoid clobbering
+        // unrelated uppercase T tokens.
+        #[allow(clippy::expect_used)]
+        Regex::new(r"(\d)T(\d)").expect("static iso-T-sep regex compiles")
+    })
+}
+
 fn re_multiple_underscore() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -114,6 +126,18 @@ pub fn slugify_camel_iso_with_year(input: &str, opts: &SlugOpts, current_year: i
         split_camel: opts.split_camel,
     };
     let slugged = slugify_with_sentinel(&with_camel, PIPELINE_SEP, &pipeline_opts);
+
+    // Step 4b: normalize ISO 8601 `T` between digits into `_` so the date
+    // parser can treat `2026_05_27T1321` as a single candidate span.
+    let slugged = re_iso_t_sep()
+        .replace_all(&slugged, |c: &regex::Captures<'_>| {
+            #[allow(clippy::expect_used)]
+            let g1 = c.get(1).expect("regex group 1").as_str();
+            #[allow(clippy::expect_used)]
+            let g2 = c.get(2).expect("regex group 2").as_str();
+            format!("{g1}_{g2}")
+        })
+        .into_owned();
 
     // Step 5: detect dates and substitute their spans with ISO output
     // wrapped in `_` markers.
