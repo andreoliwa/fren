@@ -206,6 +206,32 @@ fn format_iso(dt: NaiveDateTime, kind: DateKind) -> String {
     }
 }
 
+/// Try `try_date` on `candidate`, then on progressively shorter prefixes
+/// formed by stripping a trailing `_\d+` segment. Returns `Some((iso,
+/// suffix))` where `suffix` is the stripped tail (e.g. `"_810"`), or `None`
+/// if no prefix parses as a date.
+fn try_date_strip_suffix(candidate: &str, current_year: i32) -> Option<(String, &str)> {
+    // Try the full candidate first.
+    if let Some((iso, _)) = try_date(candidate, current_year) {
+        return Some((iso, ""));
+    }
+    // Repeatedly strip the last `_\d+` segment and retry.
+    let mut tail = candidate;
+    loop {
+        // Find last `_` followed by only digits to end of `tail`.
+        let underscore_pos = tail.rfind('_')?;
+        let after = &tail[underscore_pos + 1..];
+        if after.is_empty() || !after.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let suffix = &candidate[underscore_pos..]; // e.g. `_810`
+        tail = &tail[..underscore_pos];
+        if let Some((iso, _)) = try_date(tail, current_year) {
+            return Some((iso, suffix));
+        }
+    }
+}
+
 /// Run the date regex over `slugged` (which should already use `internal_sep`
 /// as its separator) and replace each detected span with
 /// `internal_sep + iso + internal_sep` so the surrounding pipeline can
@@ -226,8 +252,8 @@ pub fn detect_and_replace(slugged: &str, internal_sep: char, current_year: i32) 
             #[allow(clippy::expect_used)]
             // group(0) always present in a regex match
             let candidate = caps.get(0).expect("regex group 0").as_str();
-            match try_date(candidate, current_year) {
-                Some((iso, _)) => format!("_{iso}_"),
+            match try_date_strip_suffix(candidate, current_year) {
+                Some((iso, suffix)) => format!("_{iso}{suffix}_"),
                 None => candidate.to_string(),
             }
         })

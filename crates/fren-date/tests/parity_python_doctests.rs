@@ -276,6 +276,24 @@ fn datetime_iso_minute_only_human() {
     );
 }
 
+// IMG camera filename: YYYYMMDDHHmmss followed by a sequence number.
+// The sequence number must not be consumed as part of the datetime.
+#[test]
+fn img_datetime_with_sequence_suffix() {
+    assert_eq!(
+        slug("IMG-20260406-225315-810"),
+        "Img_2026-04-06T22-53-15_810"
+    );
+}
+
+#[test]
+fn img_datetime_with_sequence_suffix_variants() {
+    assert_eq!(slug("IMG-20260409-205656-612"), "Img_2026-04-09T20-56-56_612");
+    assert_eq!(slug("IMG-20260410-212844-572"), "Img_2026-04-10T21-28-44_572");
+    assert_eq!(slug("IMG-20260417-151234-795"), "Img_2026-04-17T15-12-34_795");
+    assert_eq!(slug("IMG-20260422-235305-329"), "Img_2026-04-22T23-53-05_329");
+}
+
 // Smoke test that runs even without Capitalize: just verify the function
 // produces *something* (no panic, no empty string for non-empty input).
 #[test]
