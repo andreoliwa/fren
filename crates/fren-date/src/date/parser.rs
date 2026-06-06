@@ -38,23 +38,92 @@ fn date_regex() -> &'static Regex {
     })
 }
 
+/// Zero-pad unpadded date candidates and return them in priority order for
+/// `try_date` to attempt.
+///
+/// - ISO-ordered (`YYYY_M_D` etc.): unambiguous → one candidate `YYYY_MM_DD`.
+/// - Human-ordered (`D_M_YYYY` etc.): ambiguous → two candidates in order:
+///   1. `DD_MM_YYYY` (day/month/year - preferred)
+///   2. `MM_DD_YYYY` (month/day/year - fallback if first yields invalid date)
+///
+/// Returns an empty slice when the candidate is already fully padded or does
+/// not match any unpadded shape (the normal path handles it).
+fn pad_unpadded_date(candidate: &str) -> impl Iterator<Item = String> + use<'_> {
+    fn re_iso() -> &'static Regex {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"^(\d{4})_(\d{1,2})_(\d{1,2})$").expect("static pad-iso regex compiles")
+        })
+    }
+    fn re_human() -> &'static Regex {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            Regex::new(r"^(\d{1,2})_(\d{1,2})_(\d{4})$")
+                .expect("static pad-human regex compiles")
+        })
+    }
+
+    // Use a small fixed-size array so no heap allocation is needed.
+    let mut out: [Option<String>; 2] = [None, None];
+
+    if let Some(caps) = re_iso().captures(candidate) {
+        let y = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+        let m = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+        let d = caps.get(3).map(|m| m.as_str()).unwrap_or("");
+        if m.len() != 2 || d.len() != 2 {
+            out[0] = Some(format!("{y}_{m:0>2}_{d:0>2}"));
+        }
+    } else if let Some(caps) = re_human().captures(candidate) {
+        let a = caps.get(1).map(|m| m.as_str()).unwrap_or("");
+        let b = caps.get(2).map(|m| m.as_str()).unwrap_or("");
+        let y = caps.get(3).map(|m| m.as_str()).unwrap_or("");
+        if a.len() != 2 || b.len() != 2 {
+            // D/M/Y first, M/D/Y as fallback
+            out[0] = Some(format!("{a:0>2}_{b:0>2}_{y}"));
+            out[1] = Some(format!("{b:0>2}_{a:0>2}_{y}"));
+        }
+    }
+
+    out.into_iter().flatten()
+}
+
+/// Try `effective` against every format whose template length matches.
+fn try_date_effective(effective: &str, current_year: i32) -> Option<(String, DateKind)> {
+    for spec in POSSIBLE_FORMATS {
+        if spec.template.len() != effective.len() {
+            continue;
+        }
+        if let Some((dt, kind)) = parse_with_template(effective, spec, current_year) {
+            return Some((format_iso(dt, kind), kind));
+        }
+    }
+    None
+}
+
 /// Try to parse `candidate` as one of the known formats. Returns
 /// `Some((iso_string, kind))` on success, `None` if no format matches.
 ///
 /// `candidate` should already be using `_` as its internal separator
 /// (which it will be if the slugify pipeline used `_` as the sentinel,
 /// or if the caller pre-normalized).
+///
+/// Unpadded dates (`YYYY_M_D`, `D_M_YYYY`, etc.) are zero-padded before the
+/// format-table lookup. For human-ordered ambiguous forms (`D_M_YYYY`),
+/// D/M/Y is tried first; M/D/Y is the fallback when D/M yields an invalid date.
 #[must_use]
 pub fn try_date(candidate: &str, current_year: i32) -> Option<(String, DateKind)> {
-    for spec in POSSIBLE_FORMATS {
-        if spec.template.len() != candidate.len() {
-            continue;
+    let mut pads = pad_unpadded_date(candidate).peekable();
+    if pads.peek().is_some() {
+        for padded in pads {
+            if let Some(result) = try_date_effective(&padded, current_year) {
+                return Some(result);
+            }
         }
-        if let Some((dt, kind)) = parse_with_template(candidate, spec, current_year) {
-            return Some((format_iso(dt, kind), kind));
-        }
+        return None;
     }
-    None
+    try_date_effective(candidate, current_year)
 }
 
 fn parse_with_template(
@@ -206,30 +275,41 @@ fn format_iso(dt: NaiveDateTime, kind: DateKind) -> String {
     }
 }
 
-/// Try `try_date` on `candidate`, then on progressively shorter prefixes
-/// formed by stripping a trailing `_\d+` segment. Returns `Some((iso,
-/// suffix))` where `suffix` is the stripped tail (e.g. `"_810"`), or `None`
-/// if no prefix parses as a date.
-fn try_date_strip_suffix(candidate: &str, current_year: i32) -> Option<(String, &str)> {
-    // Try the full candidate first.
-    if let Some((iso, _)) = try_date(candidate, current_year) {
-        return Some((iso, ""));
-    }
-    // Repeatedly strip the last `_\d+` segment and retry.
-    let mut tail = candidate;
-    loop {
-        // Find last `_` followed by only digits to end of `tail`.
-        let underscore_pos = tail.rfind('_')?;
-        let after = &tail[underscore_pos + 1..];
-        if after.is_empty() || !after.bytes().all(|b| b.is_ascii_digit()) {
-            return None;
+/// Split `candidate` on `_`, then slide windows of every valid size over the
+/// segments and call `try_date` on each rejoined window. Returns
+/// `Some((prefix, iso, suffix))` for the first (leftmost, then shortest)
+/// window that parses as a valid date, where `prefix` and `suffix` are the
+/// rejoined segments outside the window (e.g. `"3_"` and `"_810"`).
+/// Returns `None` if no window yields a valid date.
+///
+/// This handles both extra leading tokens (`3_29_5_2026` → window `29_5_2026`)
+/// and extra trailing tokens (`20260406_225315_810` → window `20260406_225315`,
+/// suffix `_810`), as well as arbitrary surrounding digits.
+fn try_date_in_windows(candidate: &str, current_year: i32) -> Option<(String, String, String)> {
+    let segments: Vec<&str> = candidate.split('_').collect();
+    let n = segments.len();
+    // Try windows from largest to smallest so the most-specific match wins
+    // when multiple window sizes would succeed (e.g. datetime before date).
+    // Within each size, scan left-to-right (leftmost win).
+    for size in (1..=n).rev() {
+        for start in 0..=(n - size) {
+            let window = segments[start..start + size].join("_");
+            if let Some((iso, _)) = try_date(&window, current_year) {
+                let prefix = if start == 0 {
+                    String::new()
+                } else {
+                    format!("{}_", segments[..start].join("_"))
+                };
+                let suffix = if start + size == n {
+                    String::new()
+                } else {
+                    format!("_{}", segments[start + size..].join("_"))
+                };
+                return Some((prefix, iso, suffix));
+            }
         }
-        let suffix = &candidate[underscore_pos..]; // e.g. `_810`
-        tail = &tail[..underscore_pos];
-        if let Some((iso, _)) = try_date(tail, current_year) {
-            return Some((iso, suffix));
-        }
     }
+    None
 }
 
 /// Run the date regex over `slugged` (which should already use `internal_sep`
@@ -252,8 +332,8 @@ pub fn detect_and_replace(slugged: &str, internal_sep: char, current_year: i32) 
             #[allow(clippy::expect_used)]
             // group(0) always present in a regex match
             let candidate = caps.get(0).expect("regex group 0").as_str();
-            match try_date_strip_suffix(candidate, current_year) {
-                Some((iso, suffix)) => format!("_{iso}{suffix}_"),
+            match try_date_in_windows(candidate, current_year) {
+                Some((prefix, iso, suffix)) => format!("_{prefix}{iso}{suffix}_"),
                 None => candidate.to_string(),
             }
         })

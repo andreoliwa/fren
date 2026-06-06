@@ -88,6 +88,7 @@ pub const POSSIBLE_FORMATS: &[FormatSpec] = &[
     spec("DD_MM_YYYY_HH_mm"),
     spec("DDMMYYYYHHmm"),
     // Then inverted formats
+    spec("MM_DD_YYYY"),
     spec("YYYY_MM"),
     spec("YYYY_MM_DD"),
     spec("YYYYMMDD"),

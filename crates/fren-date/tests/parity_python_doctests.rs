@@ -294,6 +294,74 @@ fn img_datetime_with_sequence_suffix_variants() {
     assert_eq!(slug("IMG-20260422-235305-329"), "Img_2026-04-22T23-53-05_329");
 }
 
+// Unpadded ISO dates: single-digit month and/or day should be zero-padded.
+#[test]
+fn unpadded_iso_single_digit_month_and_day() {
+    assert_eq!(slug("2026-6-3-RG"), "2026-06-03_Rg");
+}
+
+#[test]
+fn unpadded_iso_single_digit_month_only() {
+    assert_eq!(slug("2026-6-03-RG"), "2026-06-03_Rg");
+}
+
+#[test]
+fn unpadded_iso_single_digit_day_only() {
+    assert_eq!(slug("2026-06-3-RG"), "2026-06-03_Rg");
+}
+
+// Unpadded human-ordered dates: DD_M_YYYY, D_M_YYYY, D_MM_YYYY.
+// Dashes in source are normalized to underscores by the slug pipeline before date detection.
+#[test]
+fn unpadded_human_single_digit_month() {
+    assert_eq!(slug("blablabla_29_5_2026"), "Blablabla_2026-05-29");
+}
+
+#[test]
+fn unpadded_human_dashes_single_digit_month() {
+    assert_eq!(slug("AJDHASKJDHASJK-29-5-2026"), "Ajdhaskjdhasjk_2026-05-29");
+}
+
+#[test]
+fn unpadded_human_single_digit_day_and_month() {
+    assert_eq!(slug("blablabla_3_5_2026"), "Blablabla_2026-05-03");
+}
+
+#[test]
+fn unpadded_human_single_digit_day_only() {
+    assert_eq!(slug("blablabla_3_05_2026"), "Blablabla_2026-05-03");
+}
+
+// M/D/Y fallback: when D/M interpretation yields an invalid date, fall back to M/D/Y.
+// "13_5_2026" as D/M = day 13, month 5 → valid May 13. Stays D/M.
+// "5_13_2026" as D/M = day 5, month 13 → invalid → falls back to M/D/Y = May 13.
+#[test]
+fn unpadded_human_mdy_fallback_when_dmy_invalid() {
+    assert_eq!(slug("doc_5_13_2026"), "Doc_2026-05-13");
+}
+
+// Both D/M and M/D interpretations invalid (day 13, month 14 either way) → no date detected.
+#[test]
+fn unpadded_human_both_interpretations_invalid() {
+    assert_eq!(slug("doc_13_14_2026"), "Doc_13_14_2026");
+}
+
+// Date preceded by an extra numeric token (e.g. "B3" slug → "b3" → "b_3" after
+// camel split, but without camel split the "3" bleeds into the date regex match).
+// The window scan must find the valid date sub-span within the larger match.
+#[test]
+fn date_with_leading_numeric_token() {
+    assert_eq!(
+        slug("XPINC-NOTA-NEGOCIACAO-B3-29-5-2026"),
+        "Xpinc_Nota_Negociacao_B_3_2026-05-29"
+    );
+}
+
+#[test]
+fn date_surrounded_by_numeric_tokens() {
+    assert_eq!(slug("123-456-29-5-2026-111-234"), "123_456_2026-05-29_111_234");
+}
+
 // Smoke test that runs even without Capitalize: just verify the function
 // produces *something* (no panic, no empty string for non-empty input).
 #[test]
