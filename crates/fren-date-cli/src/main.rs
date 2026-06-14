@@ -337,7 +337,12 @@ fn run_rename(
 ) -> Result<(), fren_date::FrenError> {
     let conflict_policy = match on_conflict {
         "abort" => fren_date::ConflictPolicy::Abort,
-        _ => fren_date::ConflictPolicy::Number,
+        "number" => fren_date::ConflictPolicy::Number,
+        other => {
+            return Err(fren_date::FrenError::NotYetImplemented(format!(
+                "unknown --on-conflict value: {other}"
+            )));
+        }
     };
     let opts = fren_date::RenameOpts {
         slugify: fren_date::SlugOpts {
