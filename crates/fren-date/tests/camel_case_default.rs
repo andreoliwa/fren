@@ -117,8 +117,5 @@ fn iso_t_datetime_without_seconds() {
 #[test]
 fn compact_datetime_without_seconds() {
     // 202605271321 -> 2026-05-27T13-21-00
-    assert_eq!(
-        slug("my-file-202605271321"),
-        "my-file-2026-05-27T13-21-00"
-    );
+    assert_eq!(slug("my-file-202605271321"), "my-file-2026-05-27T13-21-00");
 }

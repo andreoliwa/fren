@@ -288,10 +288,22 @@ fn img_datetime_with_sequence_suffix() {
 
 #[test]
 fn img_datetime_with_sequence_suffix_variants() {
-    assert_eq!(slug("IMG-20260409-205656-612"), "Img_2026-04-09T20-56-56_612");
-    assert_eq!(slug("IMG-20260410-212844-572"), "Img_2026-04-10T21-28-44_572");
-    assert_eq!(slug("IMG-20260417-151234-795"), "Img_2026-04-17T15-12-34_795");
-    assert_eq!(slug("IMG-20260422-235305-329"), "Img_2026-04-22T23-53-05_329");
+    assert_eq!(
+        slug("IMG-20260409-205656-612"),
+        "Img_2026-04-09T20-56-56_612"
+    );
+    assert_eq!(
+        slug("IMG-20260410-212844-572"),
+        "Img_2026-04-10T21-28-44_572"
+    );
+    assert_eq!(
+        slug("IMG-20260417-151234-795"),
+        "Img_2026-04-17T15-12-34_795"
+    );
+    assert_eq!(
+        slug("IMG-20260422-235305-329"),
+        "Img_2026-04-22T23-53-05_329"
+    );
 }
 
 // Unpadded ISO dates: single-digit month and/or day should be zero-padded.
@@ -319,7 +331,10 @@ fn unpadded_human_single_digit_month() {
 
 #[test]
 fn unpadded_human_dashes_single_digit_month() {
-    assert_eq!(slug("AJDHASKJDHASJK-29-5-2026"), "Ajdhaskjdhasjk_2026-05-29");
+    assert_eq!(
+        slug("AJDHASKJDHASJK-29-5-2026"),
+        "Ajdhaskjdhasjk_2026-05-29"
+    );
 }
 
 #[test]
@@ -359,7 +374,10 @@ fn date_with_leading_numeric_token() {
 
 #[test]
 fn date_surrounded_by_numeric_tokens() {
-    assert_eq!(slug("123-456-29-5-2026-111-234"), "123_456_2026-05-29_111_234");
+    assert_eq!(
+        slug("123-456-29-5-2026-111-234"),
+        "123_456_2026-05-29_111_234"
+    );
 }
 
 // Smoke test that runs even without Capitalize: just verify the function

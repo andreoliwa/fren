@@ -60,8 +60,7 @@ fn pad_unpadded_date(candidate: &str) -> impl Iterator<Item = String> + use<'_> 
         static RE: OnceLock<Regex> = OnceLock::new();
         RE.get_or_init(|| {
             #[allow(clippy::expect_used)]
-            Regex::new(r"^(\d{1,2})_(\d{1,2})_(\d{4})$")
-                .expect("static pad-human regex compiles")
+            Regex::new(r"^(\d{1,2})_(\d{1,2})_(\d{4})$").expect("static pad-human regex compiles")
         })
     }
 
