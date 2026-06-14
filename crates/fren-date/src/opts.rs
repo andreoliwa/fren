@@ -14,7 +14,6 @@ use std::path::PathBuf;
 pub enum ConflictPolicy {
     /// Stop the batch on conflict. No I/O is performed when a conflict is
     /// detected at planning time.
-    #[default]
     Abort,
     /// Append `-copy-{n}` to the stem of the conflicting target name (before
     /// the extension) until a free name is found, starting at n=1. The chosen
@@ -23,6 +22,9 @@ pub enum ConflictPolicy {
     ///
     /// Example: `report.tar.gz` becomes `report.tar-copy-1.gz`,
     /// `report.tar-copy-2.gz`, etc.
+    ///
+    /// This is the default policy, matching the `fren rename` CLI default.
+    #[default]
     Number,
     /// Skip just the conflicting plan; continue the batch.
     Skip,
@@ -39,7 +41,8 @@ pub struct PlanOpts {
     pub exclude: Vec<PathBuf>,
     /// Whether to traverse subdirectories.
     pub recursive: bool,
-    /// What to do on conflicts. `Abort` and `Number` are fully functional;
+    /// What to do on conflicts. Defaults to `Number` (rename conflicting targets
+    /// to `-copy-{n}` variants). `Abort` and `Number` are fully functional;
     /// `Skip` and `Merge` return `NotYetImplemented`.
     pub on_conflict: ConflictPolicy,
 }

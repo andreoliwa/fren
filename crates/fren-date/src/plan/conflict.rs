@@ -32,16 +32,29 @@ pub fn resolve_within_batch(
     policy: ConflictPolicy,
 ) -> Result<(), FrenError> {
     // Group plan indices by target path.
-    let mut target_map: HashMap<PathBuf, Vec<usize>> = HashMap::new();
-    for (i, plan) in plans.iter().enumerate() {
-        let target = plan.parent.join(&plan.new_name);
-        target_map.entry(target).or_default().push(i);
-    }
-
-    for (target, indices) in &target_map {
-        if indices.len() <= 1 {
-            continue;
+    let target_map: HashMap<PathBuf, Vec<usize>> = {
+        let mut m: HashMap<PathBuf, Vec<usize>> = HashMap::new();
+        for (i, plan) in plans.iter().enumerate() {
+            let target = plan.parent.join(&plan.new_name);
+            m.entry(target).or_default().push(i);
         }
+        m
+    };
+
+    // Collect all initially-claimed target paths into a separate set so that
+    // we can track newly-assigned copy names without mutating `target_map`
+    // while iterating over it (borrow-checker constraint).
+    let mut claimed: HashSet<PathBuf> = target_map.keys().cloned().collect();
+
+    // Collect colliding groups (>1 member) up front so we don't borrow
+    // `target_map` across the mutable `claimed` updates below.
+    let colliding: Vec<(PathBuf, Vec<usize>)> = target_map
+        .iter()
+        .filter(|(_, indices)| indices.len() > 1)
+        .map(|(t, indices)| (t.clone(), indices.clone()))
+        .collect();
+
+    for (target, indices) in colliding {
         match policy {
             ConflictPolicy::Abort => {
                 let a = plans[indices[0]].original_path.clone();
@@ -66,8 +79,24 @@ pub fn resolve_within_batch(
                 // Extract the plain base name from the target.
                 let plain_base: OsString =
                     target.file_name().map(OsString::from).unwrap_or_default();
-                for (k, &plan_idx) in sorted.iter().enumerate().skip(1) {
-                    plans[plan_idx].new_name = numbered_name(&plain_base, k as u32);
+                let parent = plans[sorted[0]].parent.clone();
+                let mut k = 1u32;
+                for &plan_idx in sorted.iter().skip(1) {
+                    // Scan for a free slot using the global `claimed` set.
+                    // This prevents cross-group collisions: if another group's
+                    // plain target is already "foo-copy-1", we skip k=1 and
+                    // try k=2, rather than assigning a duplicate.
+                    loop {
+                        let candidate = numbered_name(&plain_base, k);
+                        let candidate_path = parent.join(&candidate);
+                        k += 1;
+                        if !claimed.contains(&candidate_path) {
+                            plans[plan_idx].new_name = candidate;
+                            // Mark as claimed so subsequent groups avoid it.
+                            claimed.insert(candidate_path);
+                            break;
+                        }
+                    }
                 }
             }
             ConflictPolicy::Skip | ConflictPolicy::Merge => {
@@ -352,6 +381,40 @@ mod tests {
         assert_eq!(new_names["I"], "i");
         assert_eq!(new_names["I "], "i-copy-1");
         assert_eq!(new_names["i"], "i-copy-2");
+    }
+
+    #[test]
+    fn within_batch_number_cross_group_collision_skips_taken_slot() {
+        // CR-01 regression: group A has {src0, src1} both targeting "foo";
+        // group B has {src2} targeting "foo-copy-1" (a different source).
+        // Old code: src1 gets "foo-copy-1" (k=1), colliding with src2.
+        // Fixed code: src1 skips "foo-copy-1" (taken by group B) and gets
+        // "foo-copy-2" instead.
+        let tmp = TempDir::new().unwrap();
+        let mut plans = vec![
+            make_plan(tmp.path(), "src0", "foo"),
+            make_plan(tmp.path(), "src1", "foo"),
+            make_plan(tmp.path(), "src2", "foo-copy-1"),
+        ];
+        resolve_within_batch(&mut plans, ConflictPolicy::Number).unwrap();
+        let names: std::collections::BTreeMap<String, String> = plans
+            .iter()
+            .map(|p| {
+                (
+                    p.old_name.to_string_lossy().to_string(),
+                    p.new_name.to_string_lossy().to_string(),
+                )
+            })
+            .collect();
+        // src0 keeps "foo" (alpha-first).
+        assert_eq!(names["src0"], "foo");
+        // src2 keeps "foo-copy-1" (single-member group, untouched).
+        assert_eq!(names["src2"], "foo-copy-1");
+        // src1 must NOT collide with src2's target; it should get "foo-copy-2".
+        assert_eq!(
+            names["src1"], "foo-copy-2",
+            "cross-group collision: src1 should skip foo-copy-1 (taken by src2)"
+        );
     }
 
     #[test]
