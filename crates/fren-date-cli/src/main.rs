@@ -98,6 +98,10 @@ enum Command {
         /// (e.g. `WhatsApp` -> `Whats-App`). Off by default.
         #[arg(long)]
         split_camel: bool,
+
+        /// Conflict policy when a target already exists: abort or number (default).
+        #[arg(long, default_value = "number", value_parser = ["abort", "number"])]
+        on_conflict: String,
     },
 
     /// Merge source directories into a target directory.
@@ -143,7 +147,8 @@ fn run(cli: Cli) -> Result<(), fren_date::FrenError> {
             directories,
             exclude,
             split_camel,
-        } => run_rename(&cli, directories, exclude, *split_camel),
+            on_conflict,
+        } => run_rename(&cli, directories, exclude, *split_camel, on_conflict),
         Command::Merge { target, sources } => run_merge(&cli, target, sources),
         Command::Completions { shell } => {
             let mut cmd = Cli::command();
@@ -328,7 +333,12 @@ fn run_rename(
     directories: &[std::path::PathBuf],
     exclude: &[std::path::PathBuf],
     split_camel: bool,
+    on_conflict: &str,
 ) -> Result<(), fren_date::FrenError> {
+    let conflict_policy = match on_conflict {
+        "abort" => fren_date::ConflictPolicy::Abort,
+        _ => fren_date::ConflictPolicy::Number,
+    };
     let opts = fren_date::RenameOpts {
         slugify: fren_date::SlugOpts {
             split_camel,
@@ -337,7 +347,7 @@ fn run_rename(
         plan: fren_date::PlanOpts {
             recursive: true,
             exclude: exclude.to_vec(),
-            on_conflict: fren_date::ConflictPolicy::Abort,
+            on_conflict: conflict_policy,
         },
         // `--apply` inverts the default-true `--dry-run`. Other flags
         // (verbose/quiet/color/log) wired in subsequent commits.
