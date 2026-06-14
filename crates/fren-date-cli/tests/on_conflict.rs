@@ -42,7 +42,10 @@ fn on_conflict_number_default_does_not_abort() {
         String::from_utf8_lossy(&out.stderr)
     );
     let copy1 = tmp.path().join("Report-2022-02-21-copy-1.txt");
-    assert!(copy1.exists(), "-copy-1 variant should exist after number-default rename");
+    assert!(
+        copy1.exists(),
+        "-copy-1 variant should exist after number-default rename"
+    );
 }
 
 #[test]
@@ -79,7 +82,10 @@ fn on_conflict_number_explicit() {
         String::from_utf8_lossy(&out.stderr)
     );
     let copy1 = tmp.path().join("Report-2022-02-21-copy-1.txt");
-    assert!(copy1.exists(), "-copy-1 variant should exist after explicit --on-conflict number");
+    assert!(
+        copy1.exists(),
+        "-copy-1 variant should exist after explicit --on-conflict number"
+    );
 }
 
 #[test]
