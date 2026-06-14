@@ -20,15 +20,20 @@ use uuid::Uuid;
 /// Build a [`RenamePlan`] vector for the given roots.
 ///
 /// Walks each root recursively (per `opts.recursive`), computes new names
-/// via [`slugify_camel_iso_with_year`], detects within-batch and pre-existing
-/// target conflicts (under the `Abort` policy), and returns plans sorted
-/// deepest-first / files-before-dirs at the same depth.
+/// via [`slugify_camel_iso_with_year`], resolves within-batch and pre-existing
+/// target conflicts according to `plan_opts.on_conflict`, and returns plans
+/// sorted deepest-first / files-before-dirs at the same depth.
+///
+/// Under [`crate::ConflictPolicy::Abort`] (the default), any conflict is
+/// returned as an error. Under [`crate::ConflictPolicy::Number`], colliding
+/// plans are renamed to `{stem}-copy-{n}` variants instead of erroring.
 ///
 /// Errors:
 /// - `FrenError::Io` if a root or any descendant cannot be read.
 /// - `FrenError::TargetExists` if a planned target already exists outside
-///   the batch.
-/// - `FrenError::WithinBatchCollision` if two plans target the same path.
+///   the batch and policy is `Abort`.
+/// - `FrenError::WithinBatchCollision` if two plans target the same path
+///   and policy is `Abort`.
 pub fn plan(
     roots: &[&Path],
     slug_opts: &SlugOpts,
@@ -38,7 +43,8 @@ pub fn plan(
     plan_with_year(roots, slug_opts, plan_opts, current_year)
 }
 
-/// Variant exposing the "current year" for deterministic testing.
+/// Variant of [`plan`] that accepts the current year explicitly for
+/// deterministic testing. Production code should use [`plan`] instead.
 pub fn plan_with_year(
     roots: &[&Path],
     slug_opts: &SlugOpts,
@@ -85,10 +91,8 @@ pub fn plan_with_year(
     }
 
     sort_bottom_up(&mut plans);
-    conflict::check_within_batch(&plans)?;
-    if plan_opts.on_conflict == crate::ConflictPolicy::Abort {
-        conflict::check_preexisting(&plans)?;
-    }
+    conflict::resolve_within_batch(&mut plans, plan_opts.on_conflict)?;
+    conflict::resolve_preexisting(&mut plans, plan_opts.on_conflict)?;
     Ok(plans)
 }
 

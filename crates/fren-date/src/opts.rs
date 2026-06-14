@@ -6,17 +6,23 @@ use std::path::PathBuf;
 /// Conflict resolution policy when a rename target already exists or two
 /// plans target the same path.
 ///
-/// Currently only [`ConflictPolicy::Abort`] is functional; the other
-/// variants are reserved for future expansion and are accepted by the
-/// type but not yet implemented in the planner/executor.
+/// [`ConflictPolicy::Abort`] and [`ConflictPolicy::Number`] are fully
+/// functional. [`ConflictPolicy::Skip`] and [`ConflictPolicy::Merge`] are
+/// reserved for future expansion and currently return
+/// [`crate::FrenError::NotYetImplemented`] when triggered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ConflictPolicy {
     /// Stop the batch on conflict. No I/O is performed when a conflict is
     /// detected at planning time.
     #[default]
     Abort,
-    /// Append the user separator + an integer to the target name until a
-    /// free name is found.
+    /// Append `-copy-{n}` to the stem of the conflicting target name (before
+    /// the extension) until a free name is found, starting at n=1. The chosen
+    /// name is guaranteed not to overwrite any file already on disk or any
+    /// other plan in the same batch.
+    ///
+    /// Example: `report.tar.gz` becomes `report.tar-copy-1.gz`,
+    /// `report.tar-copy-2.gz`, etc.
     Number,
     /// Skip just the conflicting plan; continue the batch.
     Skip,
@@ -33,7 +39,8 @@ pub struct PlanOpts {
     pub exclude: Vec<PathBuf>,
     /// Whether to traverse subdirectories.
     pub recursive: bool,
-    /// What to do on conflicts. Currently only `Abort` is functional.
+    /// What to do on conflicts. `Abort` and `Number` are fully functional;
+    /// `Skip` and `Merge` return `NotYetImplemented`.
     pub on_conflict: ConflictPolicy,
 }
 
