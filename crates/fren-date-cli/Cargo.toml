@@ -3,7 +3,7 @@ name = "fren"
 path = "src/main.rs"
 
 [dependencies]
-anstream = "0.6"
+anstream = "1"
 anstyle = "1"
 fren-date = {path = "../fren-date", version = "0.2.1"}
 chrono.workspace = true
