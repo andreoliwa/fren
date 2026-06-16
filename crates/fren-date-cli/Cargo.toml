@@ -5,7 +5,7 @@ path = "src/main.rs"
 [dependencies]
 anstream = "1"
 anstyle = "1"
-fren-date = {path = "../fren-date", version = "0.2.1"}
+fren-date = {path = "../fren-date", version = "0.2.2" }
 chrono.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
