@@ -11,14 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- *(rename)* add --on-conflict flag defaulting to number
+- _(rename)_ add --on-conflict flag defaulting to number
 
 ### Fixed
 
-- *(rename)* exhaustive match on --on-conflict, no wildcard fallthrough
+- _(rename)_ exhaustive match on --on-conflict, no wildcard fallthrough
 
 ### Other
 
-- *(deps)* add pure-rust-locales, upgrade anstream 0.6 to 1
-- *(on_conflict)* apply rustfmt
-- *(cli)* add integration tests for --on-conflict behavior
+- _(deps)_ add pure-rust-locales, upgrade anstream 0.6 to 1
+- _(on_conflict)_ apply rustfmt
+- _(cli)_ add integration tests for --on-conflict behavior
