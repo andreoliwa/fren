@@ -2,20 +2,22 @@
 //!
 //! Pipeline:
 //!
-//! 1. NFKC normalize input.
-//! 2. (Optional, off by default) Inject `_` at CamelCase boundaries
+//! 1. Normalize textual month/AM-PM datetime patterns (e.g. `Nov 19, 2025,
+//!    11_41_56 AM`) into fully-numeric form before any other step.
+//! 2. NFKC normalize input.
+//! 3. (Optional, off by default) Inject `_` at CamelCase boundaries
 //!    (`([a-z])([A-Z]+)`). Controlled by `SlugOpts.split_camel`.
-//! 3. Inject `_` at "existing time" boundaries (the
+//! 4. Inject `_` at "existing time" boundaries (the
 //!    `WhatsApp ... at 14.24.19` pattern). Always on - this is part of
 //!    date detection, not CamelCase splitting.
-//! 4. Slugify via `slug-preserve` using `_` as the internal separator
+//! 5. Slugify via `slug-preserve` using `_` as the internal separator
 //!    (so the date-format table - keyed off `_` - matches directly).
-//! 5. Run date regex; replace detected spans with their ISO form
+//! 6. Run date regex; replace detected spans with their ISO form
 //!    wrapped in `_` markers.
-//! 6. Apply case mode now that ISO dates are in place.
-//! 7. Collapse runs of `_`.
-//! 8. Substitute `_` -> user-chosen separator (`SlugOpts.separator`).
-//! 9. Trim leading/trailing separators.
+//! 7. Apply case mode now that ISO dates are in place.
+//! 8. Collapse runs of `_`.
+//! 9. Substitute `_` -> user-chosen separator (`SlugOpts.separator`).
+//! 10. Trim leading/trailing separators.
 //!
 //! `_` is used directly as the pipeline separator because the date-format
 //! table is keyed off `_`. The user's chosen output separator is currently
@@ -34,6 +36,143 @@ use std::sync::OnceLock;
 /// for the design rationale; in practice we use `_` directly because the
 /// date-format table is keyed off `_`.
 const PIPELINE_SEP: char = '_';
+
+/// Locales whose abbreviated month names are recognized during textual datetime
+/// normalization. Adding a language here is sufficient to support it - the
+/// month alternation in the regex and the lookup table are both built from
+/// these locale ABMON arrays at init time.
+///
+/// Locale data comes from `pure-rust-locales` (GNU libc locale database).
+const RECOGNIZED_LOCALES: &[&[&str]] = &[
+    pure_rust_locales::en_US::LC_TIME::ABMON,
+    // Add more locales here, e.g.:
+    // pure_rust_locales::pt_BR::LC_TIME::ABMON,
+    // pure_rust_locales::de_DE::LC_TIME::ABMON,
+];
+
+/// Build a deduplicated, case-folded map from abbreviated month name to
+/// 1-based month number, drawing from all `RECOGNIZED_LOCALES`.
+fn month_map() -> &'static Vec<(String, u32)> {
+    static MAP: OnceLock<Vec<(String, u32)>> = OnceLock::new();
+    MAP.get_or_init(|| {
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut map = Vec::new();
+        for abmon in RECOGNIZED_LOCALES {
+            for (i, &name) in abmon.iter().enumerate() {
+                let key = name.to_ascii_lowercase();
+                if seen.insert(key.clone()) {
+                    map.push((key, i as u32 + 1));
+                }
+            }
+        }
+        map
+    })
+}
+
+fn month_number(name: &str) -> Option<u32> {
+    let key = name.to_ascii_lowercase();
+    month_map()
+        .iter()
+        .find(|(k, _)| k == &key)
+        .map(|(_, n)| *n)
+}
+
+/// Regex matching a textual datetime: `<MonthName> <D|DD>, <YYYY>,
+/// <H|HH>[sep]<MM>[sep]<SS> <AM|PM>` where month names are drawn from all
+/// configured locales.
+///
+/// Examples:
+///   `Nov 19, 2025, 11_41_56 AM`
+///   `Jan 3, 2026, 9:05:02 PM`
+fn re_textual_datetime() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        // Build the month alternation from the same locale data used by
+        // month_number(), so the regex and the lookup are always in sync.
+        let mut names: Vec<String> = month_map()
+            .iter()
+            .map(|(k, _)| regex::escape(k))
+            .collect();
+        // Longer names first to avoid prefix shadowing in alternation.
+        names.sort_by_key(|a| std::cmp::Reverse(a.len()));
+        let alt = names.join("|");
+        let pattern = format!(
+            r"(?i)\b({alt})[.,\s]+(\d{{1,2}})[,\s]+(\d{{4}})[,\s]+(\d{{1,2}})[_:\.\-](\d{{2}})[_:\.\-](\d{{2}})\s*(AM|PM)\b"
+        );
+        #[allow(clippy::expect_used)]
+        Regex::new(&pattern).expect("textual-datetime regex compiles")
+    })
+}
+
+/// Replace textual month / 12-hour-clock datetime spans with numeric form.
+///
+/// `Nov 19, 2025, 11_41_56 AM` -> `19_11_2025_11_41_56`
+/// `Jan 3, 2026, 9:05:02 PM`   -> `03_01_2026_21_05_02`
+fn normalize_textual_datetime(input: &str) -> String {
+    re_textual_datetime()
+        .replace_all(input, |caps: &regex::Captures<'_>| {
+            #[allow(clippy::expect_used)]
+            let month_str = caps.get(1).expect("group 1").as_str();
+            #[allow(clippy::expect_used)]
+            let day: u32 = caps
+                .get(2)
+                .expect("group 2")
+                .as_str()
+                .parse()
+                .unwrap_or(1);
+            #[allow(clippy::expect_used)]
+            let year: u32 = caps
+                .get(3)
+                .expect("group 3")
+                .as_str()
+                .parse()
+                .unwrap_or(0);
+            #[allow(clippy::expect_used)]
+            let mut hour: u32 = caps
+                .get(4)
+                .expect("group 4")
+                .as_str()
+                .parse()
+                .unwrap_or(0);
+            #[allow(clippy::expect_used)]
+            let minute: u32 = caps
+                .get(5)
+                .expect("group 5")
+                .as_str()
+                .parse()
+                .unwrap_or(0);
+            #[allow(clippy::expect_used)]
+            let second: u32 = caps
+                .get(6)
+                .expect("group 6")
+                .as_str()
+                .parse()
+                .unwrap_or(0);
+            #[allow(clippy::expect_used)]
+            let meridiem = caps.get(7).expect("group 7").as_str();
+
+            hour = match meridiem.to_ascii_uppercase().as_str() {
+                "AM" => {
+                    if hour == 12 {
+                        0
+                    } else {
+                        hour
+                    }
+                }
+                _ => {
+                    if hour == 12 {
+                        12
+                    } else {
+                        hour + 12
+                    }
+                }
+            };
+
+            let month = month_number(month_str).unwrap_or(1);
+            format!("{day:02}_{month:02}_{year}_{hour:02}_{minute:02}_{second:02}")
+        })
+        .into_owned()
+}
 
 fn re_camelcase() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -87,6 +226,12 @@ pub fn slugify_camel_iso(input: &str, opts: &SlugOpts) -> String {
 /// Variant exposing the "current year" so tests can pin time.
 #[must_use]
 pub fn slugify_camel_iso_with_year(input: &str, opts: &SlugOpts, current_year: i32) -> String {
+    // Step 0: convert textual month / 12-hour datetime to numeric form
+    // (e.g. `Nov 19, 2025, 11_41_56 AM` -> `19_11_2025_11_41_56`) so the
+    // downstream numeric date parser can handle it.
+    let normalized = normalize_textual_datetime(input);
+    let input = normalized.as_str();
+
     // Step 1+2+3: NFKC + inject separators.
     // We do NFKC inside slug-preserve, but need to do the regex injects
     // here first (Python does NFKC then both regex injects, then slugify).
