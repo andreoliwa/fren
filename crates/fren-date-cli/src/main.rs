@@ -66,6 +66,10 @@ struct Cli {
     #[arg(short, long, global = true, default_value_t = false)]
     yes: bool,
 
+    /// Walk subdirectories recursively. Off by default (shallow).
+    #[arg(short = 'r', long, global = true, default_value_t = false)]
+    recursive: bool,
+
     /// Color output: auto, always, never.
     #[arg(long, global = true, default_value = "auto", value_parser = ["auto", "always", "never"])]
     color: String,
@@ -86,7 +90,7 @@ struct Cli {
 enum Command {
     /// Rename files and directories with slugify + ISO date detection.
     Rename {
-        /// Directories to process (recursively).
+        /// Directories to process.
         #[arg(required = true)]
         directories: Vec<std::path::PathBuf>,
 
@@ -350,7 +354,7 @@ fn run_rename(
             ..fren_date::SlugOpts::default()
         },
         plan: fren_date::PlanOpts {
-            recursive: true,
+            recursive: cli.recursive,
             exclude: exclude.to_vec(),
             on_conflict: conflict_policy,
         },
