@@ -26,13 +26,19 @@ pub enum DateKind {
     DateTime,
 }
 
-/// A date span detected inside a filename. `byte_span` is recorded so a
-/// future caller can locate the date and move it within the name.
+/// A date span detected inside a filename. `byte_span` and `iso_string` are
+/// populated by `detect_and_replace_with_span` for the reorder path.
 #[derive(Debug, Clone)]
 pub struct DetectedDate {
-    /// Byte range (in the slugified pre-substitution string) where the
-    /// date was found.
+    /// Byte range in the post-substitution output string where the ISO date
+    /// string was written. Populated only when using
+    /// `detect_and_replace_with_span` (reorder path); `0..0` otherwise.
+    /// The slice `&output[byte_span]` equals `iso_string`.
     pub byte_span: std::ops::Range<usize>,
+    /// The ISO date string written into the output at `byte_span`.
+    /// Populated only when using `detect_and_replace_with_span` (reorder
+    /// path); empty string otherwise.
+    pub iso_string: String,
     /// Parsed date/time.
     pub parsed: chrono::NaiveDateTime,
     /// Pendulum-style format string from `POSSIBLE_FORMATS`.

@@ -9,4 +9,4 @@
 mod formats;
 mod parser;
 
-pub use parser::detect_and_replace;
+pub use parser::{detect_and_replace, detect_and_replace_with_span};
