@@ -25,7 +25,7 @@
 //! `--separator=_` is ever needed, this module would switch to the PUA
 //! sentinel `'\u{E000}'` and rewrite the format table at init.
 
-use crate::date::detect_and_replace;
+use crate::date::{detect_and_replace, detect_and_replace_with_span};
 use crate::SlugOpts;
 use chrono::{Datelike, Local};
 use regex::Regex;
@@ -278,6 +278,92 @@ pub fn slugify_camel_iso_with_year(input: &str, opts: &SlugOpts, current_year: i
     final_str.trim_matches(opts.separator).to_string()
 }
 
+/// Variant of [`slugify_camel_iso_with_year`] that also returns the first
+/// detected date's metadata. Used by the reorder planner.
+///
+/// Returns `(slugified_name, Option<DetectedDate>)`. The `byte_span` inside
+/// `DetectedDate` is relative to the **intermediate** string produced after
+/// step 5 (post-NFKC, post-slug, at the point of date substitution,
+/// pre-case-transform). Callers MUST NOT slice the final slug by `byte_span`
+/// directly because case transforms between step 5 and the final output may
+/// shift byte offsets. Instead, use `detected.iso_string` to locate the date
+/// in the final slug by string search (e.g. `final_slug.find(&detected.iso_string)`).
+///
+/// ISO date strings consist of ASCII digits and hyphens, which are
+/// case-invariant. The `iso_string` value returned here remains valid for
+/// string-search in the final output regardless of which case mode is active.
+#[must_use]
+pub fn slugify_camel_iso_detect(
+    input: &str,
+    opts: &SlugOpts,
+    current_year: i32,
+) -> (String, Option<crate::DetectedDate>) {
+    // Step 0: convert textual month / 12-hour datetime to numeric form
+    let normalized = normalize_textual_datetime(input);
+    let input = normalized.as_str();
+
+    // Steps 1-3: NFKC + inject separators (same as slugify_camel_iso_with_year)
+    let nfkc: String = unicode_normalization::UnicodeNormalization::nfkc(input).collect();
+    let with_time = re_existing_time()
+        .replace_all(&nfkc, |c: &regex::Captures<'_>| {
+            #[allow(clippy::expect_used)]
+            let g1 = c.get(1).expect("regex group 1").as_str();
+            #[allow(clippy::expect_used)]
+            let g2 = c.get(2).expect("regex group 2").as_str();
+            format!("{g1}_{g2}")
+        })
+        .into_owned();
+    let with_camel = if opts.split_camel {
+        re_camelcase()
+            .replace_all(&with_time, |c: &regex::Captures<'_>| {
+                #[allow(clippy::expect_used)]
+                let g1 = c.get(1).expect("regex group 1").as_str();
+                #[allow(clippy::expect_used)]
+                let g2 = c.get(2).expect("regex group 2").as_str();
+                format!("{g1}_{g2}")
+            })
+            .into_owned()
+    } else {
+        with_time
+    };
+
+    // Step 4: slugify with PIPELINE_SEP as sentinel
+    let pipeline_opts = SlugOpts {
+        separator: PIPELINE_SEP,
+        case: slug_preserve::CaseMode::Preserve,
+        split_camel: opts.split_camel,
+    };
+    let slugged = slugify_with_sentinel(&with_camel, PIPELINE_SEP, &pipeline_opts);
+
+    // Step 4b: normalize ISO 8601 `T` between digits into `_`
+    let slugged = re_iso_t_sep()
+        .replace_all(&slugged, |c: &regex::Captures<'_>| {
+            #[allow(clippy::expect_used)]
+            let g1 = c.get(1).expect("regex group 1").as_str();
+            #[allow(clippy::expect_used)]
+            let g2 = c.get(2).expect("regex group 2").as_str();
+            format!("{g1}_{g2}")
+        })
+        .into_owned();
+
+    // Step 5: detect dates and substitute spans, also returning the first
+    // detected date's metadata.
+    let (dated, detected) = detect_and_replace_with_span(&slugged, PIPELINE_SEP, current_year);
+
+    // Steps 6-9: apply case, collapse underscores, substitute separator, trim
+    let cased = slug_preserve_apply_case(&dated, opts.case);
+    let collapsed = re_multiple_underscore()
+        .replace_all(&cased, "_")
+        .into_owned();
+    let final_str = if PIPELINE_SEP == opts.separator {
+        collapsed
+    } else {
+        collapsed.replace(PIPELINE_SEP, &opts.separator.to_string())
+    };
+    let result = final_str.trim_matches(opts.separator).to_string();
+    (result, detected)
+}
+
 fn slug_preserve_apply_case(input: &str, mode: slug_preserve::CaseMode) -> String {
     // We re-export only what's exposed from slug_preserve; case::apply is
     // pub(crate) there. We replicate the call via the SlugOpts entry.
@@ -344,4 +430,47 @@ fn title_case_after_alnum_boundary(input: &str) -> String {
     // Safe: we only modified ASCII bytes, original was UTF-8.
     #[allow(clippy::expect_used)]
     String::from_utf8(out).expect("ASCII-only mutations preserve UTF-8")
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detect_variant_returns_detected_date() {
+        // Stem only (no extension), space-separated, date is DD-MM-YYYY
+        let input = "IMG 01-12-2025 something";
+        let (slug, maybe) = slugify_camel_iso_detect(input, &SlugOpts::default(), 2024);
+        let detected = maybe.expect("should detect a date");
+        assert_eq!(detected.iso_string, "2025-12-01");
+        assert!(slug.contains("2025-12-01"), "slug should contain iso date, got: {slug}");
+    }
+
+    #[test]
+    fn detect_variant_returns_none_for_no_date() {
+        let input = "some file name";
+        let (slug, maybe) = slugify_camel_iso_detect(input, &SlugOpts::default(), 2024);
+        assert!(maybe.is_none());
+        assert_eq!(slug, "some-file-name");
+    }
+
+    #[test]
+    fn detect_variant_matches_with_year_for_same_input() {
+        let inputs = [
+            "IMG_01_12_2025_something",
+            "Meeting 2024-01-15 notes",
+            "plain text no date",
+        ];
+        let opts = SlugOpts::default();
+        let year = 2024;
+        for input in inputs {
+            let (slug_detect, _) = slugify_camel_iso_detect(input, &opts, year);
+            let slug_plain = slugify_camel_iso_with_year(input, &opts, year);
+            assert_eq!(
+                slug_detect, slug_plain,
+                "slugify_camel_iso_detect slug must match slugify_camel_iso_with_year for input: {input}"
+            );
+        }
+    }
 }

@@ -5,7 +5,7 @@
 mod camel_iso;
 mod sentinel;
 
-pub use camel_iso::{slugify_camel_iso, slugify_camel_iso_with_year};
+pub use camel_iso::{slugify_camel_iso, slugify_camel_iso_detect, slugify_camel_iso_with_year};
 // SENTINEL constant is reserved for future use. The current pipeline uses
 // `_` directly because the date-format table is keyed off `_`. Kept around
 // in case the pipeline ever needs to switch to a non-`_` internal sentinel
