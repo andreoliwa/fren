@@ -9,8 +9,8 @@ mod walker;
 pub use sort::sort_bottom_up;
 
 use crate::{
-    plan_types::ItemKind, slugify::slugify_camel_iso_with_year, FrenError, PlanOpts, RenamePlan,
-    SlugOpts,
+    plan_types::ItemKind, slugify::slugify_camel_iso_detect,
+    slugify::slugify_camel_iso_with_year, FrenError, PlanOpts, RenamePlan, SlugOpts,
 };
 use chrono::{Datelike, Local};
 use std::ffi::OsString;
@@ -85,6 +85,140 @@ pub fn plan_with_year(
                 depth: item.depth,
                 kind: item.kind,
                 detected_date: None,
+                batch_id,
+            });
+        }
+    }
+
+    sort_bottom_up(&mut plans);
+    conflict::resolve_within_batch(&mut plans, plan_opts.on_conflict)?;
+    conflict::resolve_preexisting(&mut plans, plan_opts.on_conflict)?;
+    Ok(plans)
+}
+
+/// Build a [`RenamePlan`] vector for reorder operations.
+///
+/// Like [`plan`] but moves each file's first detected date to the front
+/// of the filename. Files with no detected date or files already in
+/// canonical order (date already at front) are silently skipped.
+pub fn plan_reorder(
+    roots: &[&Path],
+    slug_opts: &SlugOpts,
+    plan_opts: &PlanOpts,
+) -> Result<Vec<RenamePlan>, FrenError> {
+    let current_year = Local::now().year();
+    plan_reorder_with_year(roots, slug_opts, plan_opts, current_year)
+}
+
+/// Variant of [`plan_reorder`] with explicit year for deterministic testing.
+pub fn plan_reorder_with_year(
+    roots: &[&Path],
+    slug_opts: &SlugOpts,
+    plan_opts: &PlanOpts,
+    current_year: i32,
+) -> Result<Vec<RenamePlan>, FrenError> {
+    let batch_id = Uuid::now_v7();
+    let mut plans = Vec::new();
+    let sep = slug_opts.separator;
+
+    for root in roots {
+        let items = walker::walk(root, plan_opts)?;
+        for item in items {
+            // Skip the root itself.
+            if item.path == *root {
+                continue;
+            }
+
+            let raw_name = item
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+
+            // For files: slugify stem only, then reconstruct with extension.
+            // For dirs: slugify the whole name.
+            let (stem, ext) = match item.kind {
+                ItemKind::Dir => (raw_name.clone(), String::new()),
+                ItemKind::File | ItemKind::Symlink => {
+                    let path = std::path::Path::new(&raw_name);
+                    let stem = path
+                        .file_stem()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    let ext = path
+                        .extension()
+                        .map(|e| e.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    (stem, ext)
+                }
+            };
+
+            let (slug, opt_detected) = slugify_camel_iso_detect(&stem, slug_opts, current_year);
+
+            // Skip files with no detected date.
+            let detected = match opt_detected {
+                Some(d) => d,
+                None => continue,
+            };
+
+            // Locate the ISO date in the final slug by string search.
+            // byte_span is relative to the intermediate string (pre-case-transform),
+            // so we use iso_string for case-invariant string search in the final slug.
+            let iso = &detected.iso_string;
+            let iso_pos = match slug.find(iso.as_str()) {
+                Some(pos) => pos,
+                None => continue,
+            };
+
+            // Build remainder: remove the ISO date and its adjacent separators.
+            let prefix_part = slug[..iso_pos].trim_matches(sep);
+            let suffix_part = slug[iso_pos + iso.len()..].trim_matches(sep);
+            let remainder = match (prefix_part.is_empty(), suffix_part.is_empty()) {
+                (true, true) => String::new(),
+                (false, true) => prefix_part.to_string(),
+                (true, false) => suffix_part.to_string(),
+                (false, false) => format!("{prefix_part}{sep}{suffix_part}"),
+            };
+
+            let new_stem = if remainder.is_empty() {
+                iso.clone()
+            } else {
+                format!("{iso}{sep}{remainder}")
+            };
+
+            let new_name_string = if ext.is_empty() {
+                new_stem
+            } else {
+                format!("{new_stem}.{}", ext.to_lowercase())
+            };
+
+            let old_name = item
+                .path
+                .file_name()
+                .map(OsString::from)
+                .unwrap_or_default();
+
+            // No-op guard: skip if reassembly produces the same name.
+            // This handles the already-canonical case: if the date is already
+            // at front, reassembly produces the same name and we skip.
+            if new_name_string.as_str() == old_name.to_string_lossy().as_ref() {
+                continue;
+            }
+
+            let parent = item
+                .path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_default();
+
+            plans.push(RenamePlan {
+                original_path: item.path.clone(),
+                parent,
+                old_name,
+                new_name: OsString::from(new_name_string),
+                depth: item.depth,
+                kind: item.kind,
+                detected_date: Some(detected),
                 batch_id,
             });
         }

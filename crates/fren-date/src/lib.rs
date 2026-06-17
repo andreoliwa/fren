@@ -54,7 +54,7 @@ pub use execute::{
 };
 pub use log::{JsonlLogSink, LogRecord, LogSink, NullLogSink};
 pub use merge::{merge_directories, unique_file_name, MergeMove, MergeReport};
-pub use plan::{plan, plan_with_year, sort_bottom_up};
+pub use plan::{plan, plan_reorder, plan_reorder_with_year, plan_with_year, sort_bottom_up};
 pub use slugify::{slugify_camel_iso, slugify_camel_iso_detect, slugify_camel_iso_with_year};
 
 use std::path::Path;

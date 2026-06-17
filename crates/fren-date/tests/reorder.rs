@@ -2,7 +2,7 @@
 
 //! Integration tests for the reorder planner.
 
-use fren_date::{plan_reorder_with_year, ConflictPolicy, ItemKind, PlanOpts, SlugOpts};
+use fren_date::{plan_reorder_with_year, PlanOpts, SlugOpts};
 use slug_preserve::CaseMode;
 use std::fs;
 use tempfile::TempDir;
