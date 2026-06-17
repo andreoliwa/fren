@@ -101,3 +101,61 @@ fn on_conflict_invalid_value() {
         "expected clap to reject --on-conflict skip"
     );
 }
+
+#[test]
+fn recursive_default_is_shallow() {
+    let tmp = TempDir::new().unwrap();
+    touch(tmp.path().join("Hello World.txt"));
+    touch(tmp.path().join("subdir").join("Inner File.txt"));
+
+    let out = fren_bin()
+        .args(["rename", "--apply", "--yes"])
+        .arg(tmp.path())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "expected success, got {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Top-level file was renamed.
+    assert!(
+        tmp.path().join("hello-world.txt").exists(),
+        "expected hello-world.txt at top level"
+    );
+    // Nested file is untouched: the directory was not descended into.
+    assert!(
+        tmp.path().join("subdir").join("Inner File.txt").exists(),
+        "subdir/Inner File.txt should be unchanged (no -r)"
+    );
+}
+
+#[test]
+fn recursive_flag_walks_deep() {
+    let tmp = TempDir::new().unwrap();
+    touch(tmp.path().join("Hello World.txt"));
+    touch(tmp.path().join("subdir").join("Inner File.txt"));
+
+    let out = fren_bin()
+        .args(["rename", "-r", "--apply", "--yes"])
+        .arg(tmp.path())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "expected success, got {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // Top-level file was renamed.
+    assert!(
+        tmp.path().join("hello-world.txt").exists(),
+        "expected hello-world.txt at top level"
+    );
+    // Nested file was also renamed because -r was given.
+    assert!(
+        tmp.path().join("subdir").join("inner-file.txt").exists(),
+        "expected subdir/inner-file.txt after recursive rename"
+    );
+}

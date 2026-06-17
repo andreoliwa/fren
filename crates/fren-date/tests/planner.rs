@@ -63,6 +63,45 @@ fn walks_recursively_and_skips_hidden() {
 }
 
 #[test]
+fn walks_non_recursively() {
+    let tmp = TempDir::new().expect("tempdir");
+    touch(tmp.path().join("Hello World.txt"));
+    touch(tmp.path().join("subdir").join("Inner File.txt"));
+
+    let plans = plan_with_year(
+        &[tmp.path()],
+        &rust_default_opts(),
+        &PlanOpts {
+            recursive: false,
+            ..PlanOpts::default()
+        },
+        2024,
+    )
+    .expect("plan ok");
+
+    // Only the immediate child "Hello World.txt" should appear; the nested
+    // file is behind a subdirectory that the walker does not descend into.
+    assert_eq!(
+        plans.len(),
+        1,
+        "expected exactly 1 plan entry, got {}: {:?}",
+        plans.len(),
+        plans
+            .iter()
+            .map(|p| p.original_path.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        plans[0]
+            .original_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy(),
+        "Hello World.txt"
+    );
+}
+
+#[test]
 fn bottom_up_sort_files_then_dirs() {
     let tmp = TempDir::new().expect("tempdir");
     touch(tmp.path().join("My Vacation").join("photo 1.txt"));

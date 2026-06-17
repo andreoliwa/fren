@@ -71,10 +71,7 @@ fn month_map() -> &'static Vec<(String, u32)> {
 
 fn month_number(name: &str) -> Option<u32> {
     let key = name.to_ascii_lowercase();
-    month_map()
-        .iter()
-        .find(|(k, _)| k == &key)
-        .map(|(_, n)| *n)
+    month_map().iter().find(|(k, _)| k == &key).map(|(_, n)| *n)
 }
 
 /// Regex matching a textual datetime: `<MonthName> <D|DD>, <YYYY>,
@@ -114,40 +111,15 @@ fn normalize_textual_datetime(input: &str) -> String {
             #[allow(clippy::expect_used)]
             let month_str = caps.get(1).expect("group 1").as_str();
             #[allow(clippy::expect_used)]
-            let day: u32 = caps
-                .get(2)
-                .expect("group 2")
-                .as_str()
-                .parse()
-                .unwrap_or(1);
+            let day: u32 = caps.get(2).expect("group 2").as_str().parse().unwrap_or(1);
             #[allow(clippy::expect_used)]
-            let year: u32 = caps
-                .get(3)
-                .expect("group 3")
-                .as_str()
-                .parse()
-                .unwrap_or(0);
+            let year: u32 = caps.get(3).expect("group 3").as_str().parse().unwrap_or(0);
             #[allow(clippy::expect_used)]
-            let mut hour: u32 = caps
-                .get(4)
-                .expect("group 4")
-                .as_str()
-                .parse()
-                .unwrap_or(0);
+            let mut hour: u32 = caps.get(4).expect("group 4").as_str().parse().unwrap_or(0);
             #[allow(clippy::expect_used)]
-            let minute: u32 = caps
-                .get(5)
-                .expect("group 5")
-                .as_str()
-                .parse()
-                .unwrap_or(0);
+            let minute: u32 = caps.get(5).expect("group 5").as_str().parse().unwrap_or(0);
             #[allow(clippy::expect_used)]
-            let second: u32 = caps
-                .get(6)
-                .expect("group 6")
-                .as_str()
-                .parse()
-                .unwrap_or(0);
+            let second: u32 = caps.get(6).expect("group 6").as_str().parse().unwrap_or(0);
             #[allow(clippy::expect_used)]
             let meridiem = caps.get(7).expect("group 7").as_str();
 
