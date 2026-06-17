@@ -108,6 +108,21 @@ enum Command {
         on_conflict: String,
     },
 
+    /// Move detected dates to the front of each filename.
+    Reorder {
+        /// Paths to process.
+        #[arg(required = true)]
+        paths: Vec<std::path::PathBuf>,
+
+        /// Exclude paths (multi).
+        #[arg(short = 'x', long)]
+        exclude: Vec<std::path::PathBuf>,
+
+        /// Conflict policy when a target already exists: abort or number (default).
+        #[arg(long, default_value = "number", value_parser = ["abort", "number"])]
+        on_conflict: String,
+    },
+
     /// Merge source directories into a target directory.
     Merge {
         /// Target directory (existing).
@@ -153,6 +168,11 @@ fn run(cli: Cli) -> Result<(), fren_date::FrenError> {
             split_camel,
             on_conflict,
         } => run_rename(&cli, directories, exclude, *split_camel, on_conflict),
+        Command::Reorder {
+            paths,
+            exclude,
+            on_conflict,
+        } => run_reorder(&cli, paths, exclude, on_conflict),
         Command::Merge { target, sources } => run_merge(&cli, target, sources),
         Command::Completions { shell } => {
             let mut cmd = Cli::command();
@@ -473,6 +493,144 @@ fn run_rename(
             }
             cprintln!();
             cprintln!("Re-run with --apply to perform these renames.");
+        }
+    }
+    Ok(())
+}
+
+fn run_reorder(
+    cli: &Cli,
+    paths: &[std::path::PathBuf],
+    exclude: &[std::path::PathBuf],
+    on_conflict: &str,
+) -> Result<(), fren_date::FrenError> {
+    // Step 1 - parse conflict_policy once before any branching (D-08).
+    let conflict_policy = match on_conflict {
+        "abort" => fren_date::ConflictPolicy::Abort,
+        "number" => fren_date::ConflictPolicy::Number,
+        other => {
+            return Err(fren_date::FrenError::NotYetImplemented(format!(
+                "unknown --on-conflict value: {other}"
+            )));
+        }
+    };
+
+    // Step 2 - build PlanOpts once; used in both dry-run and --apply (D-08).
+    let plan_opts = fren_date::PlanOpts {
+        recursive: cli.recursive,
+        exclude: exclude.to_vec(),
+        on_conflict: conflict_policy,
+    };
+
+    // Step 3 - SlugOpts (no split_camel for reorder).
+    let slug_opts = fren_date::SlugOpts::default();
+
+    // Step 4 - roots.
+    let roots_refs: Vec<&std::path::Path> =
+        paths.iter().map(std::path::PathBuf::as_path).collect();
+
+    if !cli.apply {
+        // Step 5 - dry-run branch.
+        let plans = fren_date::plan_reorder(&roots_refs, &slug_opts, &plan_opts)?;
+        if !cli.quiet {
+            if plans.is_empty() {
+                cprintln!("All names already in canonical form.");
+            } else {
+                cprintln!("Would rename {} item(s):", plans.len());
+                for plan in &plans {
+                    cprintln!("{}", format_rename_line(plan));
+                }
+                cprintln!();
+                cprintln!("Re-run with --apply to perform these renames.");
+            }
+        }
+    } else {
+        // Step 6 - apply branch.
+        let plans = fren_date::plan_reorder(&roots_refs, &slug_opts, &plan_opts)?;
+
+        if plans.is_empty() {
+            cprintln!("All names already in canonical form.");
+            return Ok(());
+        }
+
+        if !cli.yes {
+            // Non-TTY stdin without --yes: error rather than hang.
+            if !io::stdin().is_terminal() {
+                eprintln!("error: --apply requires --yes when stdin is not a terminal");
+                return Err(fren_date::FrenError::InvalidInput(
+                    "--apply requires --yes when stdin is not a terminal".to_string(),
+                ));
+            }
+
+            // Build the plan preview as a string and send it through the pager.
+            let mut preview = format!("Would rename {} item(s):\n", plans.len());
+            for plan in &plans {
+                preview.push_str(&format!("{}\n", format_rename_line(plan)));
+            }
+            output::pager::page(&preview).unwrap_or_else(|_| {
+                eprint!("{}", preview);
+            });
+
+            if !confirm_apply(plans.len()).map_err(|e| fren_date::FrenError::Io {
+                path: std::path::PathBuf::new(),
+                source: e,
+            })? {
+                eprintln!("Aborted.");
+                return Ok(());
+            }
+        }
+
+        let batch_id = plans
+            .first()
+            .map(|p| p.batch_id)
+            .unwrap_or_else(uuid::Uuid::nil);
+        let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+        let mut progress = CliProgressSink { quiet: cli.quiet };
+        let report = if cli.no_log {
+            fren_date::execute_with_progress(&plans, &mut fren_date::NullLogSink, &mut progress)?
+        } else {
+            let mut sink = fren_date::JsonlLogSink::open(cli.log_dir.as_deref(), batch_id, &ts)?;
+            sink.append(&fren_date::LogRecord::Batch {
+                v: 1,
+                id: batch_id,
+                ts: chrono::Utc::now().to_rfc3339(),
+                cmd: "reorder".to_string(),
+                args: std::env::args().collect(),
+                cwd: std::env::current_dir().unwrap_or_default(),
+                fren_version: env!("CARGO_PKG_VERSION").to_string(),
+            })?;
+            let report = fren_date::execute_with_progress(&plans, &mut sink, &mut progress)?;
+            let status = if report.errors.is_empty() {
+                "ok"
+            } else if report.applied > 0 {
+                "partial"
+            } else {
+                "error"
+            };
+            sink.append(&fren_date::LogRecord::End {
+                v: 1,
+                ts: chrono::Utc::now().to_rfc3339(),
+                status: status.to_string(),
+                applied: report.applied,
+                skipped: report.skipped,
+                errors: report.errors.len(),
+            })?;
+            report
+        };
+
+        if !cli.quiet {
+            if report.applied > 0 {
+                cprintln!();
+            }
+            let s = style_new_file();
+            cprintln!("{s}Renamed {} item(s).{s:#}", report.applied);
+        }
+        if !report.errors.is_empty() {
+            eprintln!("---");
+            eprintln!(
+                "error after {} rename(s): {}",
+                report.applied, report.errors[0]
+            );
         }
     }
     Ok(())
