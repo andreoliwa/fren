@@ -9,8 +9,8 @@ mod walker;
 pub use sort::sort_bottom_up;
 
 use crate::{
-    plan_types::ItemKind, slugify::slugify_camel_iso_detect,
-    slugify::slugify_camel_iso_with_year, FrenError, PlanOpts, RenamePlan, SlugOpts,
+    plan_types::ItemKind, slugify::slugify_camel_iso_detect, slugify::slugify_camel_iso_with_year,
+    FrenError, PlanOpts, RenamePlan, SlugOpts,
 };
 use chrono::{Datelike, Local};
 use std::ffi::OsString;

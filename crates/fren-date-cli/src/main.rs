@@ -526,8 +526,7 @@ fn run_reorder(
     let slug_opts = fren_date::SlugOpts::default();
 
     // Step 4 - roots.
-    let roots_refs: Vec<&std::path::Path> =
-        paths.iter().map(std::path::PathBuf::as_path).collect();
+    let roots_refs: Vec<&std::path::Path> = paths.iter().map(std::path::PathBuf::as_path).collect();
 
     if !cli.apply {
         // Step 5 - dry-run branch.

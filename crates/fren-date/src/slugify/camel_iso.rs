@@ -444,7 +444,10 @@ mod tests {
         let (slug, maybe) = slugify_camel_iso_detect(input, &SlugOpts::default(), 2024);
         let detected = maybe.expect("should detect a date");
         assert_eq!(detected.iso_string, "2025-12-01");
-        assert!(slug.contains("2025-12-01"), "slug should contain iso date, got: {slug}");
+        assert!(
+            slug.contains("2025-12-01"),
+            "slug should contain iso date, got: {slug}"
+        );
     }
 
     #[test]

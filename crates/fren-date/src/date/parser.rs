@@ -362,7 +362,14 @@ pub fn detect_and_replace_with_span(
 fn try_date_in_windows_full(
     candidate: &str,
     current_year: i32,
-) -> Option<(String, String, String, chrono::NaiveDateTime, crate::DateKind, &'static str)> {
+) -> Option<(
+    String,
+    String,
+    String,
+    chrono::NaiveDateTime,
+    crate::DateKind,
+    &'static str,
+)> {
     let segments: Vec<&str> = candidate.split('_').collect();
     let n = segments.len();
     for size in (1..=n).rev() {
@@ -474,7 +481,10 @@ mod tests {
         assert_eq!(detected.iso_string, "2024-01-15");
         assert_eq!(&output[detected.byte_span.clone()], "2024-01-15");
         // Second date is also substituted in the output
-        assert!(output.contains("2023-11-20"), "second date should also be substituted");
+        assert!(
+            output.contains("2023-11-20"),
+            "second date should also be substituted"
+        );
     }
 
     #[test]

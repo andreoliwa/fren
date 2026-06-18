@@ -101,7 +101,10 @@ fn reorder_uses_first_date() {
 
     assert_eq!(plans.len(), 1, "expected exactly 1 plan, got {:?}", plans);
     assert!(
-        plans[0].new_name.to_string_lossy().starts_with("2024-01-15"),
+        plans[0]
+            .new_name
+            .to_string_lossy()
+            .starts_with("2024-01-15"),
         "new name should start with first detected date, got: {}",
         plans[0].new_name.to_string_lossy()
     );
@@ -123,7 +126,10 @@ fn reorder_moves_date_to_front_lower_case_mode() {
 
     assert_eq!(plans.len(), 1, "expected exactly 1 plan, got {:?}", plans);
     assert!(
-        plans[0].new_name.to_string_lossy().starts_with("2025-12-01"),
+        plans[0]
+            .new_name
+            .to_string_lossy()
+            .starts_with("2025-12-01"),
         "date prefix should be correct under lower case mode, got: {}",
         plans[0].new_name.to_string_lossy()
     );

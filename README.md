@@ -4,6 +4,9 @@
 
 `fren` is a command-line tool for batch-renaming files and directories. It detects dates inside filenames in 17+ formats, converts them to ISO 8601, slugifies the rest of the name, splits CamelCase, normalizes Unicode, and lowercases extensions. It also includes a separate `merge` command for combining directories with automatic conflict resolution.
 
+> **Breaking change in 0.3.0:** `fren rename` now processes only the immediate
+> directory by default. Pass `-r` / `--recursive` to walk subdirectories as before.
+
 ## Features
 
 - 📅 **Date Detection**: Recognizes 17+ formats inside filenames (human-readable, ISO, datetime, minute-precision) and rewrites them as ISO 8601
@@ -57,6 +60,34 @@ fren rename --apply ~/Documents/MyFiles
 
 # Multiple directories with exclusions
 fren rename --apply -x ~/temp/skip -x ~/temp/important.txt ~/temp
+```
+
+### `fren reorder`
+
+Move detected dates to the front of each filename, placing them before any other name components.
+
+```bash
+fren reorder [OPTIONS] PATHS...
+```
+
+Options:
+
+- `-x, --exclude PATH`: Exclude one or more paths (can be repeated)
+- `-r, --recursive`: Walk subdirectories recursively
+- `--apply`: Actually perform the renames (without this, prints a dry-run preview)
+- `--on-conflict abort|number`: Conflict policy when a target already exists (default: `number`)
+
+Examples:
+
+```bash
+# Preview
+fren reorder ~/Documents/Photos
+
+# Apply
+fren reorder --apply ~/Documents/Photos
+
+# Recursive
+fren reorder --apply -r ~/Documents
 ```
 
 ### `fren merge`
