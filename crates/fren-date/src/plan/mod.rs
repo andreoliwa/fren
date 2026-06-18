@@ -57,9 +57,10 @@ pub fn plan_with_year(
     for root in roots {
         let items = walker::walk(root, plan_opts)?;
         for item in items {
-            // Skip the root itself (we don't rename what the user explicitly
-            // pointed at - only its descendants).
-            if item.path == *root {
+            // Skip directory roots - we rename descendants, not the dir the
+            // user pointed at. File roots are included: passing a file path
+            // directly means "rename this file".
+            if item.path == *root && item.kind == ItemKind::Dir {
                 continue;
             }
             let new_name = compute_new_name(&item, slug_opts, current_year);
@@ -124,8 +125,9 @@ pub fn plan_reorder_with_year(
     for root in roots {
         let items = walker::walk(root, plan_opts)?;
         for item in items {
-            // Skip the root itself.
-            if item.path == *root {
+            // Skip directory roots - only rename descendants. File roots are
+            // included: the user explicitly passed that file to be reordered.
+            if item.path == *root && item.kind == ItemKind::Dir {
                 continue;
             }
 
