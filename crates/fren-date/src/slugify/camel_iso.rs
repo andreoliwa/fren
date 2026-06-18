@@ -258,7 +258,7 @@ pub fn slugify_camel_iso_with_year(input: &str, opts: &SlugOpts, current_year: i
 
     // Step 5: detect dates and substitute their spans with ISO output
     // wrapped in `_` markers.
-    let dated = detect_and_replace(&slugged, PIPELINE_SEP, current_year);
+    let dated = detect_and_replace(&slugged, current_year);
 
     // Step 6: apply case mode now that dates are in place.
     let cased = slug_preserve_apply_case(&dated, opts.case);
@@ -348,7 +348,7 @@ pub fn slugify_camel_iso_detect(
 
     // Step 5: detect dates and substitute spans, also returning the first
     // detected date's metadata.
-    let (dated, detected) = detect_and_replace_with_span(&slugged, PIPELINE_SEP, current_year);
+    let (dated, detected) = detect_and_replace_with_span(&slugged, current_year);
 
     // Steps 6-9: apply case, collapse underscores, substitute separator, trim
     let cased = slug_preserve_apply_case(&dated, opts.case);

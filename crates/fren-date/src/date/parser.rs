@@ -39,7 +39,7 @@ fn date_regex() -> &'static Regex {
 }
 
 /// Zero-pad unpadded date candidates and return them in priority order for
-/// `try_date` to attempt.
+/// `try_date_full` to attempt.
 ///
 /// - ISO-ordered (`YYYY_M_D` etc.): unambiguous → one candidate `YYYY_MM_DD`.
 /// - Human-ordered (`D_M_YYYY` etc.): ambiguous → two candidates in order:
@@ -86,43 +86,6 @@ fn pad_unpadded_date(candidate: &str) -> impl Iterator<Item = String> + use<'_> 
     }
 
     out.into_iter().flatten()
-}
-
-/// Try `effective` against every format whose template length matches.
-fn try_date_effective(effective: &str, current_year: i32) -> Option<(String, DateKind)> {
-    for spec in POSSIBLE_FORMATS {
-        if spec.template.len() != effective.len() {
-            continue;
-        }
-        if let Some((dt, kind)) = parse_with_template(effective, spec, current_year) {
-            return Some((format_iso(dt, kind), kind));
-        }
-    }
-    None
-}
-
-/// Try to parse `candidate` as one of the known formats. Returns
-/// `Some((iso_string, kind))` on success, `None` if no format matches.
-///
-/// `candidate` should already be using `_` as its internal separator
-/// (which it will be if the slugify pipeline used `_` as the sentinel,
-/// or if the caller pre-normalized).
-///
-/// Unpadded dates (`YYYY_M_D`, `D_M_YYYY`, etc.) are zero-padded before the
-/// format-table lookup. For human-ordered ambiguous forms (`D_M_YYYY`),
-/// D/M/Y is tried first; M/D/Y is the fallback when D/M yields an invalid date.
-#[must_use]
-pub fn try_date(candidate: &str, current_year: i32) -> Option<(String, DateKind)> {
-    let mut pads = pad_unpadded_date(candidate).peekable();
-    if pads.peek().is_some() {
-        for padded in pads {
-            if let Some(result) = try_date_effective(&padded, current_year) {
-                return Some(result);
-            }
-        }
-        return None;
-    }
-    try_date_effective(candidate, current_year)
 }
 
 fn parse_with_template(
@@ -275,7 +238,7 @@ fn format_iso(dt: NaiveDateTime, kind: DateKind) -> String {
 }
 
 /// Split `candidate` on `_`, then slide windows of every valid size over the
-/// segments and call `try_date` on each rejoined window. Returns
+/// segments and attempt to parse each rejoined window as a date. Returns
 /// `Some((prefix, iso, suffix))` for the first (leftmost, then shortest)
 /// window that parses as a valid date, where `prefix` and `suffix` are the
 /// rejoined segments outside the window (e.g. `"3_"` and `"_810"`).
@@ -285,30 +248,8 @@ fn format_iso(dt: NaiveDateTime, kind: DateKind) -> String {
 /// and extra trailing tokens (`20260406_225315_810` → window `20260406_225315`,
 /// suffix `_810`), as well as arbitrary surrounding digits.
 fn try_date_in_windows(candidate: &str, current_year: i32) -> Option<(String, String, String)> {
-    let segments: Vec<&str> = candidate.split('_').collect();
-    let n = segments.len();
-    // Try windows from largest to smallest so the most-specific match wins
-    // when multiple window sizes would succeed (e.g. datetime before date).
-    // Within each size, scan left-to-right (leftmost win).
-    for size in (1..=n).rev() {
-        for start in 0..=(n - size) {
-            let window = segments[start..start + size].join("_");
-            if let Some((iso, _)) = try_date(&window, current_year) {
-                let prefix = if start == 0 {
-                    String::new()
-                } else {
-                    format!("{}_", segments[..start].join("_"))
-                };
-                let suffix = if start + size == n {
-                    String::new()
-                } else {
-                    format!("_{}", segments[start + size..].join("_"))
-                };
-                return Some((prefix, iso, suffix));
-            }
-        }
-    }
-    None
+    try_date_in_windows_full(candidate, current_year)
+        .map(|(prefix, iso, suffix, _, _, _)| (prefix, iso, suffix))
 }
 
 /// Like [`detect_and_replace`] but also returns the first detected date's metadata.
@@ -321,10 +262,8 @@ fn try_date_in_windows(candidate: &str, current_year: i32) -> Option<(String, St
 #[must_use]
 pub fn detect_and_replace_with_span(
     slugged: &str,
-    internal_sep: char,
     current_year: i32,
 ) -> (String, Option<crate::DetectedDate>) {
-    let _ = internal_sep; // unused for now; reserved for future rework
     let mut output = String::with_capacity(slugged.len());
     let mut last_end = 0usize;
     let mut first_detected: Option<crate::DetectedDate> = None;
@@ -394,9 +333,10 @@ fn try_date_in_windows_full(
     None
 }
 
-/// Like [`try_date`] but also returns the raw [`chrono::NaiveDateTime`],
-/// [`crate::DateKind`], and original format string. Used by
-/// [`try_date_in_windows_full`].
+/// Try to parse `candidate` as one of the known formats, returning
+/// `(iso_string, kind, parsed_datetime, format_template)` on success.
+/// Handles unpadded dates and human-ordered ambiguous forms exactly as the
+/// simpler path does. Used by [`try_date_in_windows_full`].
 fn try_date_full(
     candidate: &str,
     current_year: i32,
@@ -413,7 +353,8 @@ fn try_date_full(
     try_date_effective_full(candidate, current_year)
 }
 
-/// Like [`try_date_effective`] but returns `(iso, kind, parsed, fmt)`.
+/// Try `effective` against every format whose template length matches.
+/// Returns `(iso, kind, parsed_datetime, format_template)` on success.
 fn try_date_effective_full(
     effective: &str,
     current_year: i32,
@@ -429,21 +370,14 @@ fn try_date_effective_full(
     None
 }
 
-/// Run the date regex over `slugged` (which should already use `internal_sep`
-/// as its separator) and replace each detected span with
-/// `internal_sep + iso + internal_sep` so the surrounding pipeline can
-/// collapse it. Returns the substituted string.
+/// Run the date regex over `slugged` (which should already use `_` as its
+/// internal separator) and replace each detected span with `_iso_` so the
+/// surrounding pipeline can collapse it. Returns the substituted string.
+///
+/// The input is expected to use `_` as the separator throughout (the slug
+/// pipeline normalizes to `_` before date matching).
 #[must_use]
-pub fn detect_and_replace(slugged: &str, internal_sep: char, current_year: i32) -> String {
-    // First, normalize the candidate substrings so they use `_` as the
-    // separator (the format-table key). We do this by replacing
-    // `internal_sep` → `_` only inside matched spans - but the simpler
-    // approach is to transform the whole input, run detection, then
-    // substitute the sentinel back at the call site. Since the slug
-    // pipeline already routes through `_`-keyed templates by design
-    // (the sentinel is `'\u{E000}'` and we substitute it to `_` before
-    // date matching), we accept input that already uses `_`.
-    let _ = internal_sep; // unused for now; reserved for future rework
+pub fn detect_and_replace(slugged: &str, current_year: i32) -> String {
     date_regex()
         .replace_all(slugged, |caps: &regex::Captures<'_>| {
             #[allow(clippy::expect_used)]
@@ -466,7 +400,7 @@ mod tests {
     fn detect_span_basic() {
         // Input uses underscores as pipeline separator, date is DD_MM_YYYY
         let input = "IMG_01_12_2025_something";
-        let (output, maybe) = detect_and_replace_with_span(input, '_', 2025);
+        let (output, maybe) = detect_and_replace_with_span(input, 2025);
         let detected = maybe.expect("should detect a date");
         assert_eq!(detected.iso_string, "2025-12-01");
         assert_eq!(&output[detected.byte_span.clone()], "2025-12-01");
@@ -476,7 +410,7 @@ mod tests {
     fn detect_span_first_date_wins_when_multiple() {
         // Two dates in the input; the leftmost one should be returned
         let input = "Meeting_2024_01_15_review_2023_11_20";
-        let (output, maybe) = detect_and_replace_with_span(input, '_', 2024);
+        let (output, maybe) = detect_and_replace_with_span(input, 2024);
         let detected = maybe.expect("should detect a date");
         assert_eq!(detected.iso_string, "2024-01-15");
         assert_eq!(&output[detected.byte_span.clone()], "2024-01-15");
@@ -490,7 +424,7 @@ mod tests {
     #[test]
     fn detect_span_no_date_returns_none() {
         let input = "just_some_text";
-        let (output, maybe) = detect_and_replace_with_span(input, '_', 2025);
+        let (output, maybe) = detect_and_replace_with_span(input, 2025);
         assert!(maybe.is_none());
         assert_eq!(output, input);
     }
