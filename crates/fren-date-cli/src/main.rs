@@ -352,6 +352,103 @@ fn confirm_apply(n: usize) -> io::Result<bool> {
     ))
 }
 
+/// Execute a computed rename plan: confirm with the user (unless `--yes`),
+/// run the renames with optional transaction-log, and print a summary.
+///
+/// Used by both `run_rename` and `run_reorder` to avoid duplicating the
+/// TTY check, pager, confirmation, log-sink, and progress-report logic.
+fn run_apply(
+    cli: &Cli,
+    plans: Vec<fren_date::RenamePlan>,
+    cmd_name: &str,
+) -> Result<(), fren_date::FrenError> {
+    if plans.is_empty() {
+        cprintln!("All names already in canonical form.");
+        return Ok(());
+    }
+
+    if !cli.yes {
+        // Non-TTY stdin without --yes: error rather than hang.
+        if !io::stdin().is_terminal() {
+            eprintln!("error: --apply requires --yes when stdin is not a terminal");
+            return Err(fren_date::FrenError::InvalidInput(
+                "--apply requires --yes when stdin is not a terminal".to_string(),
+            ));
+        }
+
+        // Build the plan preview as a string and send it through the pager.
+        let mut preview = format!("Would rename {} item(s):\n", plans.len());
+        for plan in &plans {
+            preview.push_str(&format!("{}\n", format_rename_line(plan)));
+        }
+        output::pager::page(&preview).unwrap_or_else(|_| {
+            eprint!("{}", preview);
+        });
+
+        if !confirm_apply(plans.len()).map_err(|e| fren_date::FrenError::Io {
+            path: std::path::PathBuf::new(),
+            source: e,
+        })? {
+            eprintln!("Aborted.");
+            return Ok(());
+        }
+    }
+
+    let batch_id = plans
+        .first()
+        .map(|p| p.batch_id)
+        .unwrap_or_else(uuid::Uuid::nil);
+    let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let mut progress = CliProgressSink { quiet: cli.quiet };
+    let report = if cli.no_log {
+        fren_date::execute_with_progress(&plans, &mut fren_date::NullLogSink, &mut progress)?
+    } else {
+        let mut sink = fren_date::JsonlLogSink::open(cli.log_dir.as_deref(), batch_id, &ts)?;
+        sink.append(&fren_date::LogRecord::Batch {
+            v: 1,
+            id: batch_id,
+            ts: chrono::Utc::now().to_rfc3339(),
+            cmd: cmd_name.to_string(),
+            args: std::env::args().collect(),
+            cwd: std::env::current_dir().unwrap_or_default(),
+            fren_version: env!("CARGO_PKG_VERSION").to_string(),
+        })?;
+        let report = fren_date::execute_with_progress(&plans, &mut sink, &mut progress)?;
+        let status = if report.errors.is_empty() {
+            "ok"
+        } else if report.applied > 0 {
+            "partial"
+        } else {
+            "error"
+        };
+        sink.append(&fren_date::LogRecord::End {
+            v: 1,
+            ts: chrono::Utc::now().to_rfc3339(),
+            status: status.to_string(),
+            applied: report.applied,
+            skipped: report.skipped,
+            errors: report.errors.len(),
+        })?;
+        report
+    };
+
+    if !cli.quiet {
+        if report.applied > 0 {
+            cprintln!();
+        }
+        let s = style_new_file();
+        cprintln!("{s}Renamed {} item(s).{s:#}", report.applied);
+    }
+    if !report.errors.is_empty() {
+        eprintln!("---");
+        eprintln!(
+            "error after {} rename(s): {}",
+            report.applied, report.errors[0]
+        );
+    }
+    Ok(())
+}
+
 fn run_rename(
     cli: &Cli,
     directories: &[std::path::PathBuf],
@@ -388,149 +485,13 @@ fn run_rename(
         .map(std::path::PathBuf::as_path)
         .collect();
 
-    // Dry-run uses high-level fren_date::rename(); apply path uses the explicit
-    // plan + execute_with_log so we can write the transaction log.
-    let (plans, report) = if !opts.apply {
-        fren_date::rename(&roots, &opts)?
-    } else {
-        let plans = fren_date::plan(&roots, &opts.slugify, &opts.plan)?;
-
-        if plans.is_empty() {
-            cprintln!("All names already in canonical form.");
-            return Ok(());
-        }
-
-        if !cli.yes {
-            // Non-TTY stdin without --yes: error rather than hang.
-            if !io::stdin().is_terminal() {
-                eprintln!("error: --apply requires --yes when stdin is not a terminal");
-                return Err(fren_date::FrenError::InvalidInput(
-                    "--apply requires --yes when stdin is not a terminal".to_string(),
-                ));
-            }
-
-            // Build the plan preview as a string and send it through the pager.
-            let mut preview = format!("Would rename {} item(s):\n", plans.len());
-            for plan in &plans {
-                preview.push_str(&format!("{}\n", format_rename_line(plan)));
-            }
-            output::pager::page(&preview).unwrap_or_else(|_| {
-                eprint!("{}", preview);
-            });
-
-            if !confirm_apply(plans.len()).map_err(|e| fren_date::FrenError::Io {
-                path: std::path::PathBuf::new(),
-                source: e,
-            })? {
-                eprintln!("Aborted.");
-                return Ok(());
-            }
-        }
-
-        let batch_id = plans
-            .first()
-            .map(|p| p.batch_id)
-            .unwrap_or_else(uuid::Uuid::nil);
-        let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
-        let mut progress = CliProgressSink { quiet: cli.quiet };
-        let report = if cli.no_log {
-            fren_date::execute_with_progress(&plans, &mut fren_date::NullLogSink, &mut progress)?
-        } else {
-            let mut sink = fren_date::JsonlLogSink::open(cli.log_dir.as_deref(), batch_id, &ts)?;
-            sink.append(&fren_date::LogRecord::Batch {
-                v: 1,
-                id: batch_id,
-                ts: chrono::Utc::now().to_rfc3339(),
-                cmd: "rename".to_string(),
-                args: std::env::args().collect(),
-                cwd: std::env::current_dir().unwrap_or_default(),
-                fren_version: env!("CARGO_PKG_VERSION").to_string(),
-            })?;
-            let report = fren_date::execute_with_progress(&plans, &mut sink, &mut progress)?;
-            let status = if report.errors.is_empty() {
-                "ok"
-            } else if report.applied > 0 {
-                "partial"
-            } else {
-                "error"
-            };
-            sink.append(&fren_date::LogRecord::End {
-                v: 1,
-                ts: chrono::Utc::now().to_rfc3339(),
-                status: status.to_string(),
-                applied: report.applied,
-                skipped: report.skipped,
-                errors: report.errors.len(),
-            })?;
-            report
-        };
-        (plans, report)
-    };
-
     if opts.apply {
-        if !cli.quiet {
-            if report.applied > 0 {
-                cprintln!();
-            }
-            let s = style_new_file();
-            cprintln!("{s}Renamed {} item(s).{s:#}", report.applied);
-        }
-        if !report.errors.is_empty() {
-            eprintln!("---");
-            eprintln!(
-                "error after {} rename(s): {}",
-                report.applied, report.errors[0]
-            );
-        }
-    } else if !cli.quiet {
-        // Dry-run preview.
-        if plans.is_empty() {
-            cprintln!("All names already in canonical form.");
-        } else {
-            cprintln!("Would rename {} item(s):", plans.len());
-            for plan in &plans {
-                cprintln!("{}", format_rename_line(plan));
-            }
-            cprintln!();
-            cprintln!("Re-run with --apply to perform these renames.");
-        }
-    }
-    Ok(())
-}
-
-fn run_reorder(
-    cli: &Cli,
-    paths: &[std::path::PathBuf],
-    exclude: &[std::path::PathBuf],
-    on_conflict: &str,
-) -> Result<(), fren_date::FrenError> {
-    // Step 1 - parse conflict_policy once before any branching (D-08).
-    let conflict_policy = match on_conflict {
-        "abort" => fren_date::ConflictPolicy::Abort,
-        "number" => fren_date::ConflictPolicy::Number,
-        other => {
-            return Err(fren_date::FrenError::NotYetImplemented(format!(
-                "unknown --on-conflict value: {other}"
-            )));
-        }
-    };
-
-    // Step 2 - build PlanOpts once; used in both dry-run and --apply (D-08).
-    let plan_opts = fren_date::PlanOpts {
-        recursive: cli.recursive,
-        exclude: exclude.to_vec(),
-        on_conflict: conflict_policy,
-    };
-
-    // Step 3 - SlugOpts (no split_camel for reorder).
-    let slug_opts = fren_date::SlugOpts::default();
-
-    // Step 4 - roots.
-    let roots_refs: Vec<&std::path::Path> = paths.iter().map(std::path::PathBuf::as_path).collect();
-
-    if !cli.apply {
-        // Step 5 - dry-run branch.
-        let plans = fren_date::plan_reorder(&roots_refs, &slug_opts, &plan_opts)?;
+        let plans = fren_date::plan(&roots, &opts.slugify, &opts.plan)?;
+        run_apply(cli, plans, "rename")
+    } else {
+        // Dry-run uses high-level fren_date::rename() which returns both
+        // plans and report in one call.
+        let (plans, _report) = fren_date::rename(&roots, &opts)?;
         if !cli.quiet {
             if plans.is_empty() {
                 cprintln!("All names already in canonical form.");
@@ -543,94 +504,51 @@ fn run_reorder(
                 cprintln!("Re-run with --apply to perform these renames.");
             }
         }
-    } else {
-        // Step 6 - apply branch.
-        let plans = fren_date::plan_reorder(&roots_refs, &slug_opts, &plan_opts)?;
+        Ok(())
+    }
+}
 
+fn run_reorder(
+    cli: &Cli,
+    paths: &[std::path::PathBuf],
+    exclude: &[std::path::PathBuf],
+    on_conflict: &str,
+) -> Result<(), fren_date::FrenError> {
+    let conflict_policy = match on_conflict {
+        "abort" => fren_date::ConflictPolicy::Abort,
+        "number" => fren_date::ConflictPolicy::Number,
+        other => {
+            return Err(fren_date::FrenError::NotYetImplemented(format!(
+                "unknown --on-conflict value: {other}"
+            )));
+        }
+    };
+
+    let plan_opts = fren_date::PlanOpts {
+        recursive: cli.recursive,
+        exclude: exclude.to_vec(),
+        on_conflict: conflict_policy,
+    };
+    let slug_opts = fren_date::SlugOpts::default();
+    let roots_refs: Vec<&std::path::Path> = paths.iter().map(std::path::PathBuf::as_path).collect();
+
+    let plans = fren_date::plan_reorder(&roots_refs, &slug_opts, &plan_opts)?;
+
+    if cli.apply {
+        run_apply(cli, plans, "reorder")
+    } else if !cli.quiet {
         if plans.is_empty() {
             cprintln!("All names already in canonical form.");
-            return Ok(());
-        }
-
-        if !cli.yes {
-            // Non-TTY stdin without --yes: error rather than hang.
-            if !io::stdin().is_terminal() {
-                eprintln!("error: --apply requires --yes when stdin is not a terminal");
-                return Err(fren_date::FrenError::InvalidInput(
-                    "--apply requires --yes when stdin is not a terminal".to_string(),
-                ));
-            }
-
-            // Build the plan preview as a string and send it through the pager.
-            let mut preview = format!("Would rename {} item(s):\n", plans.len());
-            for plan in &plans {
-                preview.push_str(&format!("{}\n", format_rename_line(plan)));
-            }
-            output::pager::page(&preview).unwrap_or_else(|_| {
-                eprint!("{}", preview);
-            });
-
-            if !confirm_apply(plans.len()).map_err(|e| fren_date::FrenError::Io {
-                path: std::path::PathBuf::new(),
-                source: e,
-            })? {
-                eprintln!("Aborted.");
-                return Ok(());
-            }
-        }
-
-        let batch_id = plans
-            .first()
-            .map(|p| p.batch_id)
-            .unwrap_or_else(uuid::Uuid::nil);
-        let ts = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
-        let mut progress = CliProgressSink { quiet: cli.quiet };
-        let report = if cli.no_log {
-            fren_date::execute_with_progress(&plans, &mut fren_date::NullLogSink, &mut progress)?
         } else {
-            let mut sink = fren_date::JsonlLogSink::open(cli.log_dir.as_deref(), batch_id, &ts)?;
-            sink.append(&fren_date::LogRecord::Batch {
-                v: 1,
-                id: batch_id,
-                ts: chrono::Utc::now().to_rfc3339(),
-                cmd: "reorder".to_string(),
-                args: std::env::args().collect(),
-                cwd: std::env::current_dir().unwrap_or_default(),
-                fren_version: env!("CARGO_PKG_VERSION").to_string(),
-            })?;
-            let report = fren_date::execute_with_progress(&plans, &mut sink, &mut progress)?;
-            let status = if report.errors.is_empty() {
-                "ok"
-            } else if report.applied > 0 {
-                "partial"
-            } else {
-                "error"
-            };
-            sink.append(&fren_date::LogRecord::End {
-                v: 1,
-                ts: chrono::Utc::now().to_rfc3339(),
-                status: status.to_string(),
-                applied: report.applied,
-                skipped: report.skipped,
-                errors: report.errors.len(),
-            })?;
-            report
-        };
-
-        if !cli.quiet {
-            if report.applied > 0 {
-                cprintln!();
+            cprintln!("Would rename {} item(s):", plans.len());
+            for plan in &plans {
+                cprintln!("{}", format_rename_line(plan));
             }
-            let s = style_new_file();
-            cprintln!("{s}Renamed {} item(s).{s:#}", report.applied);
+            cprintln!();
+            cprintln!("Re-run with --apply to perform these renames.");
         }
-        if !report.errors.is_empty() {
-            eprintln!("---");
-            eprintln!(
-                "error after {} rename(s): {}",
-                report.applied, report.errors[0]
-            );
-        }
+        Ok(())
+    } else {
+        Ok(())
     }
-    Ok(())
 }
