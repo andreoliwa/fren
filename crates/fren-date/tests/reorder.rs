@@ -143,17 +143,20 @@ fn reorder_file_passed_as_root() {
     let file = tmp.path().join("EngageMe-Survey-2026-05-22.pdf");
     touch(&file);
 
-    let plans = plan_reorder_with_year(
-        &[&file],
-        &rust_default_opts(),
-        &PlanOpts::default(),
-        2026,
-    )
-    .expect("plan ok");
+    let plans = plan_reorder_with_year(&[&file], &rust_default_opts(), &PlanOpts::default(), 2026)
+        .expect("plan ok");
 
-    assert_eq!(plans.len(), 1, "file passed as root should be planned, got {:?}", plans);
+    assert_eq!(
+        plans.len(),
+        1,
+        "file passed as root should be planned, got {:?}",
+        plans
+    );
     assert!(
-        plans[0].new_name.to_string_lossy().starts_with("2026-05-22"),
+        plans[0]
+            .new_name
+            .to_string_lossy()
+            .starts_with("2026-05-22"),
         "date should be moved to front, got: {}",
         plans[0].new_name.to_string_lossy()
     );
@@ -166,13 +169,13 @@ fn rename_file_passed_as_root() {
     let file = tmp.path().join("IMG_2025_12_01_photo.jpg");
     touch(&file);
 
-    let plans = plan_with_year(
-        &[&file],
-        &rust_default_opts(),
-        &PlanOpts::default(),
-        2025,
-    )
-    .expect("plan ok");
+    let plans = plan_with_year(&[&file], &rust_default_opts(), &PlanOpts::default(), 2025)
+        .expect("plan ok");
 
-    assert_eq!(plans.len(), 1, "file passed as root should be planned, got {:?}", plans);
+    assert_eq!(
+        plans.len(),
+        1,
+        "file passed as root should be planned, got {:?}",
+        plans
+    );
 }
