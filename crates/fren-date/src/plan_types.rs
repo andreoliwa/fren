@@ -29,6 +29,7 @@ pub enum DateKind {
 /// A date span detected inside a filename. `byte_span` and `iso_string` are
 /// populated by `detect_and_replace_with_span` for the reorder path.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct DetectedDate {
     /// Byte range in the post-substitution output string where the ISO date
     /// string was written. Populated only when using
