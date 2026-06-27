@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/andreoliwa/fren/compare/fren-date-v0.2.2...fren-date-v0.3.0) - 2026-06-27
+
+### Added
+
+- *(plan)* add plan_reorder and plan_reorder_with_year
+- *(slugify)* add slugify_camel_iso_detect returning DetectedDate
+- *(parser)* add detect_and_replace_with_span and DetectedDate.iso_string
+
+### Fixed
+
+- *(plan)* slugify date-less files in plan_reorder_with_year
+- *(plan_types)* mark DetectedDate as non_exhaustive
+- *(plan)* include file roots in rename and reorder plans
+
+### Other
+
+- *(reorder)* apply rustfmt
+- *(parser)* remove dead internal_sep param and collapse parallel date-scan impls
+- *(reorder)* add CLI and library integration tests, update docs
+- *(reorder)* add failing tests for plan_reorder_with_year
+- *(recursive)* add shallow-default and deep-walk tests
+
 ## [0.2.2](https://github.com/andreoliwa/fren/compare/fren-date-v0.2.1...fren-date-v0.2.2) - 2026-06-16
 
 ### Added

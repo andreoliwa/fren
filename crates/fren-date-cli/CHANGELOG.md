@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/andreoliwa/fren/compare/fren-date-cli-v0.2.2...fren-date-cli-v0.3.0) - 2026-06-27
+
+### Added
+
+- *(cli)* add reorder subcommand with run_reorder
+- *(cli)* add global -r/--recursive flag, default shallow walk
+
+### Other
+
+- *(reorder)* add integration tests for dateless file slugify superset
+- *(cli)* extract run_apply helper to deduplicate rename/reorder apply logic
+- *(reorder)* add CLI and library integration tests, update docs
+- *(recursive)* add shallow-default and deep-walk tests
+
 ## [0.2.2](https://github.com/andreoliwa/fren/compare/fren-date-cli-v0.2.1...fren-date-cli-v0.2.2) - 2026-06-16
 
 ### Added
