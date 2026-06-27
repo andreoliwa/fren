@@ -1,5 +1,5 @@
 [dependencies]
-slug-preserve = {path = "../slug-preserve", version = "0.2.2"}
+slug-preserve = {path = "../slug-preserve", version = "0.3.0"}
 chrono.workspace = true
 pure-rust-locales.workspace = true
 regex.workspace = true
@@ -11,7 +11,7 @@ uuid.workspace = true
 walkdir.workspace = true
 
 [dev-dependencies]
-slug-preserve = {path = "../slug-preserve", version = "0.2.2"}
+slug-preserve = {path = "../slug-preserve", version = "0.3.0"}
 proptest.workspace = true
 tempfile.workspace = true
 
