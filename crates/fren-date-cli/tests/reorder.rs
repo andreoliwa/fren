@@ -124,6 +124,114 @@ fn reorder_on_conflict_numbering() {
     );
 }
 
+/// reorder slugifies a date-less file whose name is not yet canonical.
+/// A file with spaces and no date must be slugified the same way `rename` would.
+#[test]
+fn reorder_slugifies_dateless_file() {
+    let tmp = TempDir::new().unwrap();
+    touch(tmp.path().join("My Photo from the trip.jpg"));
+
+    let out = fren_bin()
+        .args(["reorder", "--apply", "--yes"])
+        .arg(tmp.path())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "expected success, got {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // The original spaced filename must be gone and no files may still contain
+    // a space - the slug pipeline replaces spaces with the separator.
+    let names: Vec<String> = fs::read_dir(tmp.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    assert!(
+        !tmp.path().join("My Photo from the trip.jpg").exists(),
+        "original file should have been renamed"
+    );
+    assert!(
+        names.iter().all(|n| !n.contains(' ')),
+        "no file name in the dir should contain a space after reorder; found: {names:?}"
+    );
+    assert!(
+        tmp.path().join("My-Photo-from-the-trip.jpg").exists(),
+        "expected My-Photo-from-the-trip.jpg"
+    );
+}
+
+/// reorder skips a date-less file that is already in canonical slug form.
+#[test]
+fn reorder_skips_dateless_canonical() {
+    let tmp = TempDir::new().unwrap();
+    // This name is already canonical - `rename` reports "All names already in
+    // canonical form." for it and reorder must do the same.
+    touch(tmp.path().join("my-photo-from-the-trip.jpg"));
+
+    let out = fren_bin()
+        .args(["reorder"])
+        .arg(tmp.path())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "expected success, got {}\nstderr: {}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("All names already in canonical form."),
+        "expected 'All names already in canonical form.' in stdout, got: {stdout}"
+    );
+}
+
+/// reorder and rename must produce the same target name for any date-less file.
+#[test]
+fn reorder_matches_rename_for_dateless() {
+    let original = "My Photo from the trip.jpg";
+
+    // Run `rename` in one temp dir.
+    let rename_dir = TempDir::new().unwrap();
+    touch(rename_dir.path().join(original));
+    let out = fren_bin()
+        .args(["rename", "--apply", "--yes"])
+        .arg(rename_dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "rename failed: {:?}", out.status);
+
+    // Run `reorder` in a separate temp dir.
+    let reorder_dir = TempDir::new().unwrap();
+    touch(reorder_dir.path().join(original));
+    let out = fren_bin()
+        .args(["reorder", "--apply", "--yes"])
+        .arg(reorder_dir.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "reorder failed: {:?}", out.status);
+
+    // Collect resulting filenames (excluding the original if it somehow remained).
+    let rename_result: Vec<String> = fs::read_dir(rename_dir.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    let reorder_result: Vec<String> = fs::read_dir(reorder_dir.path())
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+
+    assert_eq!(
+        rename_result, reorder_result,
+        "rename and reorder must produce the same name for a date-less file"
+    );
+}
+
 /// Verify that --on-conflict is wired correctly: with abort policy and a
 /// pre-existing conflict target, the command fails even in dry-run (the
 /// planner raises an error before any rename occurs). This confirms that
