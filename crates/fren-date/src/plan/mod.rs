@@ -100,8 +100,9 @@ pub fn plan_with_year(
 /// Build a [`RenamePlan`] vector for reorder operations.
 ///
 /// Like [`plan`] but moves each file's first detected date to the front
-/// of the filename. Files with no detected date or files already in
-/// canonical order (date already at front) are silently skipped.
+/// of the filename. Files with no detected date are still slugified (same
+/// transformation as [`plan`]), making `plan_reorder` a strict superset of
+/// [`plan`]. Files already in canonical form are silently skipped.
 pub fn plan_reorder(
     roots: &[&Path],
     slug_opts: &SlugOpts,
@@ -157,41 +158,53 @@ pub fn plan_reorder_with_year(
 
             let (slug, opt_detected) = slugify_camel_iso_detect(&stem, slug_opts, current_year);
 
-            // Skip files with no detected date.
-            let detected = match opt_detected {
-                Some(d) => d,
-                None => continue,
-            };
+            // Compute the target name and detected_date for both arms.
+            // - Date-bearing files: move the ISO date to the front (reorder).
+            // - Date-less files: use the slug as-is (pure slugify, same as `plan`).
+            let (new_name_string, detected_date) = match opt_detected {
+                Some(detected) => {
+                    // Locate the ISO date in the final slug by string search.
+                    // iso_string is case-invariant so it matches the slug's case.
+                    let iso = &detected.iso_string;
+                    let iso_pos = match slug.find(iso.as_str()) {
+                        Some(pos) => pos,
+                        // Date found by parser but not in slug - skip (defensive).
+                        None => continue,
+                    };
 
-            // Locate the ISO date in the final slug by string search.
-            // byte_span is relative to the intermediate string (pre-case-transform),
-            // so we use iso_string for case-invariant string search in the final slug.
-            let iso = &detected.iso_string;
-            let iso_pos = match slug.find(iso.as_str()) {
-                Some(pos) => pos,
-                None => continue,
-            };
+                    // Build remainder: strip the ISO date and its adjacent separators.
+                    let prefix_part = slug[..iso_pos].trim_matches(sep);
+                    let suffix_part = slug[iso_pos + iso.len()..].trim_matches(sep);
+                    let remainder = match (prefix_part.is_empty(), suffix_part.is_empty()) {
+                        (true, true) => String::new(),
+                        (false, true) => prefix_part.to_string(),
+                        (true, false) => suffix_part.to_string(),
+                        (false, false) => format!("{prefix_part}{sep}{suffix_part}"),
+                    };
 
-            // Build remainder: remove the ISO date and its adjacent separators.
-            let prefix_part = slug[..iso_pos].trim_matches(sep);
-            let suffix_part = slug[iso_pos + iso.len()..].trim_matches(sep);
-            let remainder = match (prefix_part.is_empty(), suffix_part.is_empty()) {
-                (true, true) => String::new(),
-                (false, true) => prefix_part.to_string(),
-                (true, false) => suffix_part.to_string(),
-                (false, false) => format!("{prefix_part}{sep}{suffix_part}"),
-            };
+                    let new_stem = if remainder.is_empty() {
+                        iso.clone()
+                    } else {
+                        format!("{iso}{sep}{remainder}")
+                    };
 
-            let new_stem = if remainder.is_empty() {
-                iso.clone()
-            } else {
-                format!("{iso}{sep}{remainder}")
-            };
-
-            let new_name_string = if ext.is_empty() {
-                new_stem
-            } else {
-                format!("{new_stem}.{}", ext.to_lowercase())
+                    let name = if ext.is_empty() {
+                        new_stem
+                    } else {
+                        format!("{new_stem}.{}", ext.to_lowercase())
+                    };
+                    (name, Some(detected))
+                }
+                None => {
+                    // No date detected: produce the same slugified name that
+                    // `plan` / `compute_new_name` would produce for this file.
+                    let name = if ext.is_empty() {
+                        slug
+                    } else {
+                        format!("{slug}.{}", ext.to_lowercase())
+                    };
+                    (name, None)
+                }
             };
 
             let old_name = item
@@ -201,8 +214,8 @@ pub fn plan_reorder_with_year(
                 .unwrap_or_default();
 
             // No-op guard: skip if reassembly produces the same name.
-            // This handles the already-canonical case: if the date is already
-            // at front, reassembly produces the same name and we skip.
+            // Handles already-canonical files (date already at front, or name
+            // already a valid slug with no date).
             if new_name_string.as_str() == old_name.to_string_lossy().as_ref() {
                 continue;
             }
@@ -220,7 +233,7 @@ pub fn plan_reorder_with_year(
                 new_name: OsString::from(new_name_string),
                 depth: item.depth,
                 kind: item.kind,
-                detected_date: Some(detected),
+                detected_date,
                 batch_id,
             });
         }
